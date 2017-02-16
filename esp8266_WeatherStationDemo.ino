@@ -34,7 +34,7 @@ See more at http://blog.squix.ch
 #include "WeatherStationImages.h"
 #include "TimeClient.h"
 
-//#define DHT_ON
+#define DHT_ON
 #ifdef DHT_ON
 #include "dht11.h"
 #endif
@@ -58,8 +58,7 @@ const int UPDATE_INTERVAL_SECS = 10 * 60; // Update every 10 minutes
 
 
 #ifdef DHT_ON
-// DHT
-const int DHT_PIN = 14
+#define DHT_PIN 14
 char FormattedTemperature[10];
 char FormattedHumidity[10];
 #endif
@@ -101,9 +100,13 @@ WundergroundClient wunderground(IS_METRIC);
 
 #ifdef DHT_ON
 // Initialize the temperature/ humidity sensor
-DHT dht(DHTPIN, DHTTYPE);
+dht11 dht;
+#define ALPHA 0.7
+bool dhtInitialized = false;
 float humidity = 0.0;
 float temperature = 0.0;
+
+
 #endif
 
 #ifdef THINGSPEAK_ON
@@ -128,18 +131,25 @@ void updateData(OLEDDisplay *display);
 void drawDateTime(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y);
 void drawCurrentWeather(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y);
 void drawForecast(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y);
+#ifdef DHT_ON
+void drawIndoor(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y);
+#endif
 #ifdef THINGSPEAK_ON
 void drawThingspeak(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y);
 #endif
 void drawForecastDetails(OLEDDisplay *display, int x, int y, int dayIndex);
 void drawHeaderOverlay(OLEDDisplay *display, OLEDDisplayUiState* state);
 void setReadyForWeatherUpdate();
-
+void setReadyForWeatherUpdate();
+void setReadyForDHTUpdate();
 
 // Add frames
 // this array keeps function pointers to all frames
 // frames are the single views that slide from right to left
 FrameCallback frames[] = { drawDateTime, drawCurrentWeather, drawForecast
+#ifdef DHT_ON
+, drawIndoor
+#endif
 #ifdef THINGSPEAK_ON
 , drawThingspeak 
 #endif
@@ -232,8 +242,6 @@ void loop() {
     // time budget.
     delay(remainingTimeBudget);
   }
-
-
 }
 
 void drawProgress(OLEDDisplay *display, int percentage, String label) {
@@ -255,9 +263,7 @@ void updateData(OLEDDisplay *display) {
 
 #ifdef DHT_ON
   drawProgress(display, 70, "Updating DHT Sensor");
-  humidity = dht.readHumidity();
-  drawProgress(display, 80, "Updating DHT Sensor");
-  temperature = dht.readTemperature(IS_METRIC);
+  updateDHT();
   delay(250);
 #endif
 
@@ -274,9 +280,13 @@ void updateData(OLEDDisplay *display) {
 
 #ifdef DHT_ON
 void updateDHT() {
-  humidity = dht.readHumidity();
-  temperature = dht.readTemperature(!IS_METRIC);
-  readyForDHTUpdate = false;
+  if (DHTLIB_OK == dht.read(DHT_PIN)) {
+    Serial.print("DHT read: "); Serial.print(dht.temperature); Serial.print("C "); Serial.print(dht.humidity); Serial.println("\%");
+    humidity = !dhtInitialized ? dht.humidity : ALPHA * humidity + (1 - ALPHA) * (float)dht.humidity;
+    temperature = !dhtInitialized ? dht.temperature : ALPHA * temperature + (1 - ALPHA) * (float)dht.temperature;
+    readyForDHTUpdate = false;
+    dhtInitialized = true;
+  }
 }
 #endif
 
@@ -320,7 +330,7 @@ void drawForecast(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, in
 void drawIndoor(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y) {
   display->setTextAlignment(TEXT_ALIGN_CENTER);
   display->setFont(ArialMT_Plain_10);
-  display->drawString(64 + x, 0, "DHT22 Indoor Sensor");
+  display->drawString(64 + x, 0, "Indoor Sensor");
   display->setFont(ArialMT_Plain_16);
   dtostrf(temperature,4, 1, FormattedTemperature);
   display->drawString(64+x, 12, "Temp: " + String(FormattedTemperature) + (IS_METRIC ? "°C": "°F"));
@@ -371,3 +381,9 @@ void setReadyForWeatherUpdate() {
   Serial.println("Setting readyForUpdate to true");
   readyForWeatherUpdate = true;
 }
+
+void setReadyForDHTUpdate() {
+  Serial.println("Setting readyForDHTUpdate to true");
+  readyForDHTUpdate = true;
+}
+
