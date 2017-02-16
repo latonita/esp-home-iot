@@ -1,3 +1,5 @@
+#include <Arduino.h>
+
 /**The MIT License (MIT)
 
 Copyright (c) 2016 by Daniel Eichhorn
@@ -82,7 +84,7 @@ const String WUNDERGROUND_CITY = "Saint_Petersburg";
 //Thingspeak Settings
 const String THINGSPEAK_CHANNEL_ID = "67284";
 const String THINGSPEAK_API_READ_KEY = "L2VIW20QVNZJBLAK";
-#endif 
+#endif
 
 // Initialize the oled display for address 0x3c
 // sda-pin=14 and sdc-pin=12
@@ -151,7 +153,7 @@ FrameCallback frames[] = { drawDateTime, drawCurrentWeather, drawForecast
 , drawIndoor
 #endif
 #ifdef THINGSPEAK_ON
-, drawThingspeak 
+, drawThingspeak
 #endif
 };
 int numberOfFrames = (sizeof(frames) / sizeof(FrameCallback));
@@ -191,9 +193,13 @@ void setup() {
   }
 
   ui.setTargetFPS(30);
-
+/*
   ui.setActiveSymbol(activeSymbole);
   ui.setInactiveSymbol(inactiveSymbole);
+*/
+  ui.setActiveSymbol(emptySymbol);      // Hack until disableIndicator works
+  ui.setInactiveSymbol(emptySymbol);    // - Set an empty symbol
+  ui.disableIndicator();
 
   // You can change this to
   // TOP, LEFT, BOTTOM, RIGHT
@@ -270,7 +276,7 @@ void updateData(OLEDDisplay *display) {
 #ifdef THINGSPEAK_ON
   drawProgress(display, 80, "Updating thingspeak...");
   thingspeak.getLastChannelItem(THINGSPEAK_CHANNEL_ID, THINGSPEAK_API_READ_KEY);
-#endif  
+#endif
 
   lastUpdate = timeClient.getFormattedTime();
   readyForWeatherUpdate = false;
@@ -365,16 +371,50 @@ void drawForecastDetails(OLEDDisplay *display, int x, int y, int dayIndex) {
   display->setTextAlignment(TEXT_ALIGN_LEFT);
 }
 
+// converts the dBm to a range between 0 and 100%
+int8_t getWifiQuality() {
+  int32_t dbm = WiFi.RSSI();
+  if(dbm <= -100) {
+      return 0;
+  } else if(dbm >= -50) {
+      return 100;
+  } else {
+      return 2 * (dbm + 100);
+  }
+}
+
 void drawHeaderOverlay(OLEDDisplay *display, OLEDDisplayUiState* state) {
   display->setColor(WHITE);
   display->setFont(ArialMT_Plain_10);
-  String time = timeClient.getFormattedTime().substring(0, 5);
   display->setTextAlignment(TEXT_ALIGN_LEFT);
-  display->drawString(0, 54, time);
-  display->setTextAlignment(TEXT_ALIGN_RIGHT);
+  display->drawString(0, 54, String(state->currentFrame + 1) + "/" + String(numberOfFrames));
+
+  String time = timeClient.getFormattedTime().substring(0, 5);
+  display->setTextAlignment(TEXT_ALIGN_CENTER);
+  display->drawString(38, 54, time);
+
+  display->setTextAlignment(TEXT_ALIGN_CENTER);
   String temp = wunderground.getCurrentTemp() + "°C";
-  display->drawString(128, 54, temp);
+  display->drawString(90, 54, temp);
+
+  int8_t quality = getWifiQuality();
+  for (int8_t i = 0; i < 4; i++) {
+    for (int8_t j = 0; j < 2 * (i + 1); j++) {
+      if (quality > i * 25 || j == 0) {
+        display->setPixel(120 + 2 * i, 63 - j);
+      }
+    }
+  }
+
+
+  display->setTextAlignment(TEXT_ALIGN_CENTER);
+  display->setFont(Meteocons_Plain_10);
+  String weatherIcon = wunderground.getTodayIcon();
+  int weatherIconWidth = display->getStringWidth(weatherIcon);
+  display->drawString(64, 55, weatherIcon);
+
   display->drawHorizontalLine(0, 52, 128);
+
 }
 
 void setReadyForWeatherUpdate() {
@@ -386,4 +426,3 @@ void setReadyForDHTUpdate() {
   Serial.println("Setting readyForDHTUpdate to true");
   readyForDHTUpdate = true;
 }
-
