@@ -34,6 +34,7 @@ See more at http://blog.squix.ch
 #include "WundergroundClient.h"
 #include "WeatherStationFonts.h"
 #include "WeatherStationImages.h"
+#include "LatonitaIcons.h"
 #include "TimeClient.h"
 
 #define DHT_ON
@@ -58,6 +59,7 @@ const char* WIFI_PWD = "MegaPass!";
 // Setup
 const int UPDATE_INTERVAL_SECS = 10 * 60; // Update every 10 minutes
 
+#define PULSE_PIN 12
 
 #ifdef DHT_ON
 #define DHT_PIN 14
@@ -107,9 +109,24 @@ dht11 dht;
 bool dhtInitialized = false;
 float humidity = 0.0;
 float temperature = 0.0;
-
-
 #endif
+
+//power counting
+typedef struct {
+  int power, pulse;
+} PayloadTX;
+
+volatile PayloadTX emontx;
+
+// Pulse counting settings
+long pulseCount = 0;                                                    // Number of pulses, used to measure energy.
+unsigned long pulseTime,lastTime;                                       // Used to measure power.
+double power, elapsedWh;                                                // power and energy
+int ppwh = 1;                                                           // 1000 pulses/kwh = 1 pulse per wh - Number of pulses per wh - found or set on the meter.
+
+
+char formattedInstantPower[10] = "--";
+float instantPower = 0;
 
 #ifdef THINGSPEAK_ON
 ThingspeakClient thingspeak;
@@ -131,6 +148,7 @@ Ticker ticker;
 void drawProgress(OLEDDisplay *display, int percentage, String label);
 void updateData(OLEDDisplay *display);
 void drawDateTime(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y);
+void drawKWH(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y);
 void drawCurrentWeather(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y);
 void drawForecast(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y);
 #ifdef DHT_ON
@@ -148,7 +166,7 @@ void setReadyForDHTUpdate();
 // Add frames
 // this array keeps function pointers to all frames
 // frames are the single views that slide from right to left
-FrameCallback frames[] = { drawDateTime, drawCurrentWeather, drawForecast
+FrameCallback frames[] = { drawDateTime, drawKWH, drawCurrentWeather, drawForecast
 #ifdef DHT_ON
 , drawIndoor
 #endif
@@ -160,6 +178,15 @@ int numberOfFrames = (sizeof(frames) / sizeof(FrameCallback));
 
 OverlayCallback overlays[] = { drawHeaderOverlay };
 int numberOfOverlays = 1;
+
+
+// The interrupt routine - runs each time a falling edge of a pulse is detected
+void onPulse() {
+  lastTime = pulseTime;        //used to measure time between pulses.
+  pulseTime = micros();
+  pulseCount++;                                                      //pulseCounter
+  emontx.power = int((3600000000.0 / (pulseTime - lastTime))/ppwh);  //Calculate power
+}
 
 void setup() {
   Serial.begin(115200);
@@ -174,7 +201,7 @@ void setup() {
   //display.flipScreenVertically();
   display.setFont(ArialMT_Plain_10);
   display.setTextAlignment(TEXT_ALIGN_CENTER);
-  display.setContrast(255);
+  display.setContrast(180);
 
   WiFi.begin(WIFI_SSID, WIFI_PWD);
 
@@ -219,7 +246,13 @@ void setup() {
   // Inital UI takes care of initalising the display too.
   ui.init();
 
+
+  attachInterrupt(PULSE_PIN, onPulse, FALLING);                                 // KWH interrupt attached to IRQ 0  = Digita 2 - hardwired to emonTx V3 terminal block
+
+
   Serial.println("");
+
+
 
   updateData(&display);
 
@@ -229,7 +262,15 @@ void setup() {
 #endif
 }
 
+
 void loop() {
+  //emontx.pulse = pulseCount;
+  emontx.pulse += pulseCount;
+  pulseCount=0;
+  Serial.print(emontx.power);
+  Serial.print("W ");
+  Serial.println(emontx.pulse);
+
   if (readyForWeatherUpdate && ui.getUiState()->frameState == FIXED) {
     updateData(&display);
   }
@@ -248,6 +289,13 @@ void loop() {
     // time budget.
     delay(remainingTimeBudget);
   }
+
+  static unsigned long m = 0;
+  if (m + 500 < millis())
+    m = millis();
+    instantPower += 0.18;
+
+    dtostrf(instantPower, 4, 1, formattedInstantPower);
 }
 
 void drawProgress(OLEDDisplay *display, int percentage, String label) {
@@ -307,6 +355,24 @@ void drawDateTime(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, in
   textWidth = display->getStringWidth(time);
   display->drawString(64 + x, 15 + y, time);
   display->setTextAlignment(TEXT_ALIGN_LEFT);
+}
+
+void drawKWH(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y) {
+  display->setFont(ArialMT_Plain_10);
+  display->setTextAlignment(TEXT_ALIGN_LEFT);
+  display->drawString(42 + x, 5 + y, "Instant power");
+
+  String temp = String(formattedInstantPower) + " kW";
+  display->setFont(ArialMT_Plain_24);
+  display->drawString(42 + x, 15 + y, temp);
+  //int tempWidth = display->getStringWidth(temp);
+
+  display->drawXbm(0 + x, 5 + y, zap_width, zap_height, zap1);
+//  display->drawXbm(86, 5 + y, zap_width, zap_height, zap2);
+  // display->setFont(Meteocons_Plain_42);
+  // String weatherIcon = wunderground.getTodayIcon();
+  // int weatherIconWidth = display->getStringWidth(weatherIcon);
+  // display->drawString(32 + x - weatherIconWidth / 2, 05 + y, weatherIcon);
 }
 
 void drawCurrentWeather(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y) {
@@ -386,6 +452,23 @@ int8_t getWifiQuality() {
 void drawHeaderOverlay(OLEDDisplay *display, OLEDDisplayUiState* state) {
   display->setColor(WHITE);
   display->setFont(ArialMT_Plain_10);
+  String time = timeClient.getFormattedTime().substring(0, 5);
+
+  display->setTextAlignment(TEXT_ALIGN_LEFT);
+  display->drawString(0, 54, time);
+
+  display->setTextAlignment(TEXT_ALIGN_CENTER);
+  String temp = String(formattedInstantPower) + "kW";
+  display->drawString(64, 54, temp);
+
+  display->setTextAlignment(TEXT_ALIGN_RIGHT);
+  temp = wunderground.getCurrentTemp() + "°C";
+  display->drawString(128, 54, temp);
+
+  display->drawHorizontalLine(0, 52, 128);
+/*
+  display->setColor(WHITE);
+  display->setFont(ArialMT_Plain_10);
   display->setTextAlignment(TEXT_ALIGN_LEFT);
   display->drawString(0, 54, String(state->currentFrame + 1) + "/" + String(numberOfFrames));
 
@@ -414,7 +497,7 @@ void drawHeaderOverlay(OLEDDisplay *display, OLEDDisplayUiState* state) {
   display->drawString(64, 55, weatherIcon);
 
   display->drawHorizontalLine(0, 52, 128);
-
+*/
 }
 
 void setReadyForWeatherUpdate() {
