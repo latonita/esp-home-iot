@@ -1,7 +1,21 @@
-#include <Arduino.h>
+/*
+2017. Anton Viktorov. Preface.
+This work is based on Daniel Eichhorn's Weather Station Demo sketch.
+I used to have quite similar application, but due to unknown reasons all glitchy
+chineese esp8266 modules stopped accepting my sketch, rebooting even before
+entering 'setup()' function. I have spent 2 days not able to solve an issue and
+was ready to break my monitor with an empty wisky bottle. And I just tried this
+sketch and it started working, oceans bless my monitor... So I started updating
+this sketch trying to get same functionality (+extra) that I had before.
 
-/**The MIT License (MIT)
+My orignal work was based on MIT, and this one is not an exception.
 
+*/
+
+/*
+The MIT License (MIT)
+
+Copyright (c) 2017 by Anton Viktorov
 Copyright (c) 2016 by Daniel Eichhorn
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -24,6 +38,7 @@ SOFTWARE.
 
 See more at http://blog.squix.ch
 */
+#include <Arduino.h>
 
 #include <ESP8266WiFi.h>
 #include <Ticker.h>
@@ -36,6 +51,8 @@ See more at http://blog.squix.ch
 #include "WeatherStationImages.h"
 #include "LatonitaIcons.h"
 #include "TimeClient.h"
+
+#include <PubSubClient.h>
 
 #define DHT_ON
 #ifdef DHT_ON
@@ -56,9 +73,31 @@ See more at http://blog.squix.ch
 const char* WIFI_SSID = "LAWIRELESS";
 const char* WIFI_PWD = "MegaPass!";
 
-// Setup
-const int UPDATE_INTERVAL_SECS = 10 * 60; // Update every 10 minutes
+// MQTT
+#define DATA_COLLECTION_PERIOD_IN_SECONDS 5 * 60 // time to collect data before posting to mqtt
+#define MQTT_SERVER "192.168.3.3"
+#define MQTT_BASE_TOPIC
 
+// myhome/sensors/common/esp1/power  = pulses;period
+// myhome/sensors/common/esp1/temperature  = temp
+// myhome/sensors/common/esp1/humidity  = temp
+// myhome/sensors/common/esp1/water = pulses_cold;pulses_hot;period
+// myhome/sensors/entrance/doorbell = dtm;photo
+
+// data to show:
+// myhome/presentation/power ///// ????
+// myhome/presentation/alert/
+
+//to read: http://tinkerman.cat/mqtt-topic-naming-convention/
+//https://harizanov.com/2014/09/mqtt-topic-tree-structure-improvements/
+//https://forum.mysensors.org/topic/4341/mqtt-messages-and-sensor-tree/4
+//https://hackaday.io/project/7342-mqopen/log/33302-mqtt-topic-structure-redesign
+
+
+// Setup
+const int FORECAST_UPDATE_INTERVAL_SECS = 10 * 60; // Update every 10 minutes
+
+// kwh pulses
 #define PULSE_PIN 12
 
 #ifdef DHT_ON
@@ -256,7 +295,7 @@ void setup() {
 
   updateData(&display);
 
-  ticker.attach(UPDATE_INTERVAL_SECS, setReadyForWeatherUpdate);
+  ticker.attach(FORECAST_UPDATE_INTERVAL_SECS, setReadyForWeatherUpdate);
 #ifdef DHT_ON
   ticker.attach(DHT_UPDATE_INTERVAL_SECS, setReadyForDHTUpdate);
 #endif
