@@ -52,6 +52,9 @@
 #include "TimeClient.h"
 
 #include <PubSubClient.h>
+#include <ESP8266mDNS.h>  //For OTA
+#include <WiFiUdp.h>      //For OTA
+#include <ArduinoOTA.h>   //For OTA
 
 /***************************
  * Features on/off
@@ -91,6 +94,10 @@ String hostName(HOSTNAME_BASE);
 // WIFI
 const char* WIFI_SSID = "LAWIRELESS";
 const char* WIFI_PWD = "MegaPass!";
+
+WiFiClient wifiClient;
+WiFiServer TelnetServer(8266);        // Necesary to make Arduino Software autodetect OTA device
+PubSubClient mqttClient(wifiClient);
 
 // OTA configuration
 #define OTA_PASSWORD "Secret!"
@@ -305,6 +312,75 @@ void initUi() {
   updateData(&display);
 }
 
+void setupOta() {
+  Serial.print("Configuring OTA device...");
+
+  TelnetServer.begin();   //Necesary to make Arduino Software autodetect OTA device
+
+  ArduinoOTA.onStart([]() {
+    Serial.println("OTA starting...");
+    display.clear();
+    display.setFont(ArialMT_Plain_10);
+    display.setTextAlignment(TEXT_ALIGN_CENTER_BOTH);
+    display.drawString(DISPLAY_WIDTH/2, DISPLAY_HEIGHT/2 - 10, "OTA Update");
+    display.display();
+  });
+
+  ArduinoOTA.onEnd([]() {
+    Serial.println("OTA update finished!");
+    Serial.println("Rebooting...");
+    display.clear();
+    display.setFont(ArialMT_Plain_10);
+    display.setTextAlignment(TEXT_ALIGN_CENTER_BOTH);
+    display.drawString(DISPLAY_WIDTH/2, DISPLAY_HEIGHT/2, "Restart");
+    display.display();
+  });
+
+  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+    int p = progress / (total / 100);
+    Serial.printf("OTA in progress: %u%%\r\n", p );
+//    digitalWrite(WIFI_LED_PIN,p%2>0?LOW:HIGH);
+    display.drawProgressBar(4, 32, 120, 8, p );
+    display.display();
+  });
+
+  ArduinoOTA.onError([](ota_error_t error) {
+    Serial.printf("Error[%u]: ", error);
+    if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
+    else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
+    else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
+    else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
+    else if (error == OTA_END_ERROR) Serial.println("End Failed");
+  });
+
+  ArduinoOTA.setPassword((const char *)OTA_PASSWORD);
+  ArduinoOTA.setHostname(hostName.c_str());
+  ArduinoOTA.begin();
+}
+void setupWifi() {
+  WiFi.hostname(hostName);
+  WiFi.begin(WIFI_SSID, WIFI_PWD);
+
+  Serial.print("Connecting to WiFi..");
+  int counter = 0;
+  while (WiFi.status() != WL_CONNECTED) {
+      delay(500);
+      Serial.print(".");
+      display.clear();
+      display.drawString(64, 10, "Connecting to WiFi");
+      display.drawXbm(46, 30, 8, 8, counter % 3 == 0 ? activeSymbole : inactiveSymbole);
+      display.drawXbm(60, 30, 8, 8, counter % 3 == 1 ? activeSymbole : inactiveSymbole);
+      display.drawXbm(74, 30, 8, 8, counter % 3 == 2 ? activeSymbole : inactiveSymbole);
+      display.display();
+
+      counter++;
+      //todo: check if we cant connect for too long. options - reboot, buzz, setup own wifi?
+  }
+  Serial.println();
+  Serial.print("Got IP Address: ");
+  Serial.println(WiFi.localIP());
+}
+
 void setup() {
     hostName += String(ESP.getChipId(), HEX);
     Serial.begin(SERIAL_BAUD_RATE);
@@ -312,27 +388,8 @@ void setup() {
     Serial.println("Entering setup.");
     initDisplay();
 
-    WiFi.hostname(hostName);
-    WiFi.begin(WIFI_SSID, WIFI_PWD);
-
-    Serial.print("Connecting to WiFi..");
-    int counter = 0;
-    while (WiFi.status() != WL_CONNECTED) {
-        delay(500);
-        Serial.print(".");
-        display.clear();
-        display.drawString(64, 10, "Connecting to WiFi");
-        display.drawXbm(46, 30, 8, 8, counter % 3 == 0 ? activeSymbole : inactiveSymbole);
-        display.drawXbm(60, 30, 8, 8, counter % 3 == 1 ? activeSymbole : inactiveSymbole);
-        display.drawXbm(74, 30, 8, 8, counter % 3 == 2 ? activeSymbole : inactiveSymbole);
-        display.display();
-
-        counter++;
-        //todo: check if we cant connect for too long. options - reboot, buzz, setup own wifi?
-    }
-    Serial.println();
-    Serial.print("Got IP Address: ");
-    Serial.println(WiFi.localIP());
+    setupWifi();
+    setupOta();
 
     initUi();
 
@@ -344,6 +401,8 @@ void setup() {
 
 
 void loop() {
+    ArduinoOTA.handle();
+
     //emontx.pulse = pulseCount;
     emontx.pulse += pulseCount;
     pulseCount = 0;
