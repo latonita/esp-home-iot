@@ -36,6 +36,8 @@
    SOFTWARE.
 
    See more at http://blog.squix.ch
+   // Please read http://blog.squix.org/weatherstation-getting-code-adapting-it
+   // for setup instructions
  */
 #include <Arduino.h>
 
@@ -63,131 +65,104 @@
 
 
 #ifdef DHT_ON
-#include "dht11.h"
+  #include "dht11.h"
 #endif
 
 #ifdef THINGSPEAK_ON
-#include "ThingspeakClient.h"
+  #include "ThingspeakClient.h"
 #endif
 
-const char compileDate[] = __DATE__ " " __TIME__;
+#define ledOn() digitalWrite(LED_PIN,HIGH)
+#define ledOff() digitalWrite(LED_PIN,LOW)
+#define ledSet(x) digitalWrite(LED_PIN,x)
+#define ledPulse(x) ledOn();delayMs(2*x/3);ledOff();delayMs(x/3)
+#define setupLed() pinMode(LED_PIN,OUTPUT); ledOff()
+
+#define led2On() digitalWrite(LED_PIN2,HIGH)
+#define led2Off() digitalWrite(LED_PIN2,LOW)
+#define led2Set(x) digitalWrite(LED_PIN2,x)
+#define led2Pulse(x) led2On();delayMs(2*x/3);led2Off();delayMs(x/3)
+#define setupLed2() pinMode(LED_PIN,OUTPUT); led2Off()
+
+
 /***************************
- * Begin Settings
+ * Network
  **************************/
-// Please read http://blog.squix.org/weatherstation-getting-code-adapting-it
-// for setup instructions
-
-#define SERIAL_BAUD_RATE 74880
-
-// Network
 String hostName(HOSTNAME_BASE);
-
 WiFiClient wifiClient;
-WiFiServer TelnetServer(8266);        // Necesary to make Arduino Software autodetect OTA device
+WiFiServer TelnetServer(8266); // Necesary to make Arduino Software autodetect OTA device
 PubSubClient mqttClient(wifiClient);
 
-
-
-// myhome/sensors/entrance/$online
-// myhome/sensors/entrance/$id
-// myhome/sensors/entrance/$ip
-// myhome/sensors/entrance/$stats/uptime = seconds
-// myhome/sensors/entrance/$stats/signal = signal strength
-// myhome/sensors/entrance/$fw = firmware string
-
-// myhome/sensors/entrance/power/pulses_raw  = pulses;period
-// myhome/sensors/entrance/power/instant  = instant watts
-// myhome/sensors/entrance/power/usage = wh since last time
-// myhome/sensors/entrance/temperature  = temp
-// myhome/sensors/entrance/humidity  = temp
-// myhome/sensors/entrance/doorbell = dtm;photo
-
-// myhome/sensors/bathroom/water/pulses_raw = pulses_cold;pulses_hot;period
-
-// data to show:
-// myhome/presentation/power ///// ????
-// myhome/presentation/alert/
-
-//to read: http://tinkerman.cat/mqtt-topic-naming-convention/
-//https://harizanov.com/2014/09/mqtt-topic-tree-structure-improvements/
-//https://forum.mysensors.org/topic/4341/mqtt-messages-and-sensor-tree/4
-//https://hackaday.io/project/7342-mqopen/log/33302-mqtt-topic-structure-redesign
-
-
-// Setup
-
+/***************************
+ * DHT sensor
+ **************************/
 #ifdef DHT_ON
-char FormattedTemperature[10];
-char FormattedHumidity[10];
+  char FormattedTemperature[10];
+  char FormattedHumidity[10];
+  // Initialize the temperature/ humidity sensor
+  dht11 dht;
+  #define ALPHA 0.7
+  bool dhtInitialized = false;
+  float humidity = 0.0;
+  float temperature = 0.0;
 #endif
 
-// TimeClient settings
-const float UTC_OFFSET = 3;
+/***************************
+ * TimeClient
+ **************************/
+TimeClient timeClient(UTC_OFFSET);
+String lastUpdate = "--";
 
-// Wunderground Settings
+/***************************
+ * Wunderground Settings
+ **************************/
 const boolean IS_METRIC = true;
 const String WUNDERGRROUND_API_KEY = "f886e212d6bc0877";
 const String WUNDERGRROUND_LANGUAGE = "EN";
 const String WUNDERGROUND_COUNTRY = "RU";
 const String WUNDERGROUND_CITY = "Saint_Petersburg";
+WundergroundClient wunderground(IS_METRIC); // Set to false, if you prefere imperial/inches, Fahrenheit
 
+/***************************
+ * ThingSpeak Settings
+ **************************/
 #ifdef THINGSPEAK_ON
-//Thingspeak Settings
-const String THINGSPEAK_CHANNEL_ID = "67284";
-const String THINGSPEAK_API_READ_KEY = "L2VIW20QVNZJBLAK";
+  //Thingspeak Settings
+  const String THINGSPEAK_CHANNEL_ID = "67284";
+  const String THINGSPEAK_API_READ_KEY = "L2VIW20QVNZJBLAK";
+  ThingspeakClient thingspeak;
 #endif
 
+/***************************
+ * display objects
+ **************************/
+SSD1306Wire display(I2C_DISPLAY_ADDRESS, SDA_PIN, SDC_PIN);
+OLEDDisplayUi ui( &display );
 
-TimeClient timeClient(UTC_OFFSET);
-// Set to false, if you prefere imperial/inches, Fahrenheit
-WundergroundClient wunderground(IS_METRIC);
+/***************************
+ * Ticker and flags
+ **************************/
+#define addRegularAction(x, y) { Ticker* t = new Ticker(); t->attach(x,y);}
 
-#ifdef DHT_ON
-// Initialize the temperature/ humidity sensor
-dht11 dht;
-#define ALPHA 0.7
-bool dhtInitialized = false;
-float humidity = 0.0;
-float temperature = 0.0;
-#endif
-
-//power counting
-typedef struct {
-    int power, pulse;
-} PayloadTX;
-
-volatile PayloadTX emontx;
-
-// Pulse counting settings
-long pulseCount = 0;                                                    // Number of pulses, used to measure energy.
-unsigned long pulseTime,lastTime;                                       // Used to measure power.
-double power, elapsedWh;                                                // power and energy
-#define ppwh (100/64)                                                           // 1000 pulses/kwh = 1 pulse per wh - Number of pulses per wh - found or set on the meter.
-
-#define NO_INSTANT_POWER_DATA "--"
-char formattedInstantPower[10] = NO_INSTANT_POWER_DATA;
-float instantPower = 0;
-
-#ifdef THINGSPEAK_ON
-ThingspeakClient thingspeak;
-#endif
-
-// flag changed in the ticker function every xxx minutes
 bool readyToPublishData = false;
+void setReadyToPublishData();
+
 bool readyForWeatherUpdate = false;
+void setReadyForWeatherUpdate();
+
 #ifdef DHT_ON
-// flag changed in the ticker function every 1 minute
-bool readyForDHTUpdate = false;
-#define DHT_UPDATE_INTERVAL_SECS 60
+  bool readyForDHTUpdate = false;
+  void setReadyForDHTUpdate();
 #endif
 
-String lastUpdate = "--";
+/***************************
+ * forward declarations
+ **************************/
 
-//declaring prototypes
 void updateDHT();
+void updateData(OLEDDisplay *display);
 
 void drawProgress(OLEDDisplay *display, int percentage, String label);
-void updateData(OLEDDisplay *display);
 void drawDateTime(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y);
 void drawInstantPower(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y);
 void drawCurrentWeather(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y);
@@ -200,21 +175,16 @@ void drawForecast(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, in
 #endif
 void drawForecastDetails(OLEDDisplay *display, int x, int y, int dayIndex);
 void drawHeaderOverlay(OLEDDisplay *display, OLEDDisplayUiState* state);
-void setReadyToPublishData();
-void setReadyForWeatherUpdate();
-void setReadyForWeatherUpdate();
-void setReadyForDHTUpdate();
-
 
 // Add frames
 // this array keeps function pointers to all frames
 // frames are the single views that slide from right to left
 FrameCallback frames[] = { drawDateTime, drawInstantPower, drawCurrentWeather, drawForecast
 #ifdef DHT_ON
-                           , drawIndoor
+  , drawIndoor
 #endif
 #ifdef THINGSPEAK_ON
-                           , drawThingspeak
+  , drawThingspeak
 #endif
 };
 int numberOfFrames = (sizeof(frames) / sizeof(FrameCallback));
@@ -222,42 +192,74 @@ int numberOfFrames = (sizeof(frames) / sizeof(FrameCallback));
 OverlayCallback overlays[] = { drawHeaderOverlay };
 int numberOfOverlays = 1;
 
-// display objects
-SSD1306Wire display(I2C_DISPLAY_ADDRESS, SDA_PIN, SDC_PIN);
-OLEDDisplayUi ui( &display );
-Ticker ticker;
+
+/***************************
+ * Power counting
+ **************************/
+typedef struct {
+  unsigned long count = 0;
+  unsigned long timeMicros = 0;
+  unsigned long lastTimeMicros = 0;
+} PulseParamISR;
+volatile PulseParamISR powerPulse;
+
+typedef struct {
+  unsigned int pulsesKept = 0;
+  unsigned int secondsKept = 0;
+
+  unsigned int instantWatts = 0;
+  unsigned int consumedkWh = 0;
+
+  unsigned int consumedTodaykWh = 0;
+  unsigned int consumedYesterdaykWh = 0;
+  unsigned long lastSeconds = 0;
+} PowerDisplay;
+PowerDisplay power;
+
+char formattedInstantPower[10];
+static char tempBuffer32[32];
 
 
 // The interrupt routine - runs each time a falling edge of a pulse is detected
-void onPowerPulse() {
-    lastTime = pulseTime;      //used to measure time between pulses.
-    pulseTime = micros();
-    pulseCount++;                                                    //pulseCounter
-//    emontx.power = int((3600000000.0 / (pulseTime - lastTime)) / ppwh); //Calculate power
+#define PULSE_DEBOUNCE 100000L
+void onPowerPulseISR() {
+  if (digitalRead(PULSE_PIN) == LOW) {
+    if(micros() >= powerPulse.timeMicros + PULSE_DEBOUNCE ) {
+      powerPulse.count++;
+      powerPulse.lastTimeMicros = powerPulse.timeMicros;      //used to measure time between pulses.
+      powerPulse.timeMicros = micros();
+    }
+  }
 }
 
 void setupPowerPulsesCounting() {
     pinMode(PULSE_PIN, INPUT);
-    attachInterrupt(PULSE_PIN, onPowerPulse, RISING);
+    attachInterrupt(PULSE_PIN, onPowerPulseISR, FALLING);
 }
 
 void setupRegularActions() {
-  ticker.attach(MQTT_DATA_COLLECTION_PERIOD_SECS, setReadyToPublishData);
-  ticker.attach(FORECAST_UPDATE_INTERVAL_SECS, setReadyForWeatherUpdate);
-#ifdef DHT_ON
-  ticker.attach(DHT_UPDATE_INTERVAL_SECS, setReadyForDHTUpdate);
-#endif
+  addRegularAction(MQTT_DATA_COLLECTION_PERIOD_SECS, setReadyToPublishData);
+  addRegularAction(FORECAST_UPDATE_INTERVAL_SECS, setReadyForWeatherUpdate);
+  #ifdef DHT_ON
+    addRegularAction(DHT_UPDATE_INTERVAL_SECS, setReadyForDHTUpdate);
+  #endif
 }
 
 void printVersion() {
+  const char compileDate[] = __DATE__ " " __TIME__;
   Serial.println();
   Serial.println("===============================================================");
   Serial.println(": MQTT Pulse counter and MQTT display with OTA                :");
   Serial.println(": (c) Anton Viktorov, latonita@yandex.ru, github.com/latonita :");
   Serial.println("===============================================================");
-  Serial.printf("Compile Date: %s\r\n", compileDate);
-  Serial.printf("Module Id: %s\r\n", hostName.c_str());
+  Serial.printf("Compile date: %s\r\n", compileDate);
+  Serial.printf("Module id: %s\r\n", hostName.c_str());
+  Serial.printf("Wireless %s\r\n", WIFI_SSID);
+  Serial.printf("MQTT server %s\r\n", MQTT_SERVER);
+  Serial.printf("MQTT topic %s\r\n", MQTT_BASE_TOPIC);
+  Serial.println("===============================================================");
 }
+
 void initDisplay() {
   // initialize dispaly
   display.init();
@@ -292,13 +294,29 @@ void initUi() {
   updateData(&display);
 }
 
+// void setupLed() {
+//   pinMode(LED_PIN, OUTPUT);
+//   digitalWrite(LED_PIN, LOW);
+// }
+//
+// static char ledState = LOW;
+// void changeLed() {
+//   ledState ^= HIGH;
+//   digitalWrite(LED_PIN, ledState);
+// }
+//
+// void setLed(char state) {
+//   ledState = state;
+//   digitalWrite(LED_PIN, ledState);
+// }
+
+void mqttReconnect();
 void setupMqtt() {
     Serial.println("Configuring MQTT server...");
     mqttClient.setServer(MQTT_SERVER, MQTT_PORT);
     Serial.printf("MQTT server IP: %s\r\n", MQTT_SERVER);
-  //  Serial.printf("   Username:  %s\r\n",MQTT_USER);
-//    Serial.println("MQTT Cliend Id: " + hostName.c_str());
     Serial.println("MQTT configured!");
+    mqttReconnect();
 }
 
 void setupOta() {
@@ -328,6 +346,7 @@ void setupOta() {
   ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
     int p = progress / (total / 100);
     Serial.printf("OTA in progress: %u%%\r\n", p );
+    digitalWrite(LED_PIN, (p&1) ? LOW : HIGH);
     display.drawProgressBar(4, 32, 120, 8, p );
     display.display();
   });
@@ -366,7 +385,8 @@ void setupWifi() {
   Serial.print("Connecting to WiFi..");
   int counter = 0;
   while (WiFi.status() != WL_CONNECTED) {
-      delay(500);
+      led2Pulse(250);
+      yield();
       Serial.print(".");
       display.clear();
       display.drawString(64, 10, "Connecting to WiFi");
@@ -381,69 +401,84 @@ void setupWifi() {
   Serial.print("Got IP Address: ");
   Serial.println(WiFi.localIP());
 }
-
 void setup() {
-    hostName += String(ESP.getChipId(), HEX);
-    Serial.begin(SERIAL_BAUD_RATE);
-    delay(50);
-    printVersion();
-    Serial.println("Entering setup.");
-    initDisplay();
-    setupWifi();
-    setupOta();
-    setupMqtt();
-    initUi();
-    setupPowerPulsesCounting();
-    setupRegularActions();
-    Serial.println("Setup finished.");
+  setupLed();
+  setupLed2();
+  led2Pulse(100);led2Pulse(100);led2Pulse(100);led2Pulse(100);
+
+  hostName += String(ESP.getChipId(), HEX);
+  Serial.begin(SERIAL_BAUD_RATE);
+  delayMs(50);
+  printVersion();
+  Serial.println("Entering setup.");
+  initDisplay();
+  setupWifi();
+  setupOta();
+  setupMqtt();
+  initUi();
+  setupPowerPulsesCounting();
+  setupRegularActions();
+  Serial.println("Setup finished.");
 }
 
-void formatInstandPower(int watts) {
-  if (instantPower < 10) {
+void formatInstantPower(double watts) {
+  if (watts < 10) {
     sprintf(formattedInstantPower, "-- W");
-  } else if (instantPower < 1000) {
-
+  } else if (watts < 1000) {
+    dtostrf(watts, 4, 0, tempBuffer32);
+    sprintf(formattedInstantPower, "%s W", tempBuffer32);
+  } else {
+    dtostrf(watts/1000, 4, 1, tempBuffer32);
+    sprintf(formattedInstantPower, "%s kW", tempBuffer32);
   }
 }
 
 void powerCalculationLoop() {
-  //emontx.pulse = pulseCount;
-  emontx.pulse += pulseCount;
-  pulseCount = 0;
-  // 640 p per 1kWh => 1p = 1.5625 Watt
-  float wattsSpent = 1.5625 * emontx.pulse;
-  //int instantPower = 1000 * 3600 * p / (s * 640);
-  static unsigned long m = 0;
-  if (millis() > m + 1000) {
-    m = millis();
-    emontx.power = instantPower = int((3600000000.0 / (micros() - lastTime)) / ppwh); //Calculate power
-    instantPower /= 10;
-    instantPower *= 10;
-    dtostrf(instantPower, 4, 0, formattedInstantPower);
+  // today/y-day
+  unsigned long secondsOfDay = timeClient.getCurrentEpochWithUtcOffset()  % 86400L;
+  if (power.lastSeconds > secondsOfDay) {
+    power.lastSeconds = secondsOfDay;
+    power.consumedYesterdaykWh = power.consumedTodaykWh;
+    power.consumedTodaykWh = 0;
   }
-}
 
-void mqttReconnect() {
-//  backToSystemPage();
-  // Loop until we're reconnected
-  while (!mqttClient.connected()) {
-    Serial.print("Attempting MQTT connection...");
-//    updateDisplay();
-    yield();
-    delay(250);
+  // calc power consumption
+  // 640 p per 1kWh => 1p = 1.5625 Wh
+  //                   1Wh = 0.640p
+  #define ppwh (1000/640)
+  #define whpp (640/1000)
 
-//    if (mqttClient.connect(mqttClientId.c_str(), MQTT_USER, MQTT_PASSWORD)) {
-    if (mqttClient.connect(hostName.c_str())) {
-      Serial.println("connected");
-//      updateDisplay();
+//  float wattsSpent = 1.5625 * (power.pulsesKept + powerPulse.count);
+
+
+  //    emontx.power = int((3600000000.0 / (pulseTime - lastTime)) / ppwh); //Calculate power
+  //int instantPower = 1000 * 3600 * p / (s * 640);
+  //  unsigned int instantWatts = 0;
+
+//pulses per watt hour
+
+  static char firstRun = 1;
+  static double watts = 0;
+  static unsigned long m = 0;
+  if (millis() > m + 15*1000) {
+    m = millis();
+
+    // first time. rollover is not a problem
+    if (powerPulse.lastTimeMicros == 0) {
+      watts = 0;
     } else {
-      Serial.print("failed, rc=");
-      Serial.print(mqttClient.state());
-      Serial.println(" try again in 5 seconds");
-//      updateDisplay();
-      // Wait 5 seconds before retrying
-      delay(5000);
+      watts = int((3600000000.0 / (micros() - powerPulse.lastTimeMicros)) / ppwh); //Calculate power
     }
+    formatInstantPower(watts);
+
+    //debug
+    Serial.printf("-------\r\n");
+    Serial.printf("insta watt: %s\r\n",formattedInstantPower);
+    Serial.printf("pulses: %d\r\n", powerPulse.count);
+    Serial.printf("pulses kept: %d\r\n", power.pulsesKept);
+    unsigned int wh = (powerPulse.count + power.pulsesKept) * 640 / 1000;
+    Serial.printf("consumed energy: %d Wh\r\n", wh);
+    Serial.println(getUpTime());
   }
 }
 
@@ -460,15 +495,18 @@ void updateData(OLEDDisplay *display) {
     Serial.println("Data update...");
     drawProgress(display, 10, "Updating time...");
     timeClient.updateTime();
+    led2Pulse(250);
     drawProgress(display, 30, "Updating conditions...");
     wunderground.updateConditions(WUNDERGRROUND_API_KEY, WUNDERGRROUND_LANGUAGE, WUNDERGROUND_COUNTRY, WUNDERGROUND_CITY);
+    led2Pulse(250);
     drawProgress(display, 50, "Updating forecasts...");
     wunderground.updateForecast(WUNDERGRROUND_API_KEY, WUNDERGRROUND_LANGUAGE, WUNDERGROUND_COUNTRY, WUNDERGROUND_CITY);
+    led2Pulse(250);
 
 #ifdef DHT_ON
     drawProgress(display, 70, "Updating DHT Sensor");
     updateDHT();
-    delay(250);
+    led2Pulse(250);
 #endif
 
 #ifdef THINGSPEAK_ON
@@ -479,7 +517,7 @@ void updateData(OLEDDisplay *display) {
     lastUpdate = timeClient.getFormattedTime();
     readyForWeatherUpdate = false;
     drawProgress(display, 100, "Done...");
-    delay(1000);
+    led2Pulse(250);
 }
 
 void drawDateTime(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y) {
@@ -623,10 +661,6 @@ void drawHeaderOverlay(OLEDDisplay *display, OLEDDisplayUiState* state) {
  */
 }
 
-void setReadyToPublishData() {
-  Serial.println("Ticker: readyToPublishData");
-  readyToPublishData = true;
-}
 
 void setReadyForWeatherUpdate() {
   Serial.println("Ticker: readyForWeatherUpdate");
@@ -636,6 +670,11 @@ void setReadyForWeatherUpdate() {
 void setReadyForDHTUpdate() {
   Serial.println("Ticker: readyForDHTUpdate");
   readyForDHTUpdate = true;
+}
+
+void setReadyToPublishData() {
+  Serial.println("Ticker: readyToPublishData");
+  readyToPublishData = true;
 }
 
 #ifdef DHT_ON
@@ -652,44 +691,125 @@ void updateDHT() {
 }
 #endif
 
+const static String mqttBaseTopic = MQTT_BASE_TOPIC;
+
+#define MQTT_ONLINE_TOPIC MQTT_BASE_TOPIC "$online"
+#define MQTT_MSG_ONLINE "online"
+#define MQTT_MSG_OFFLINE "offline"
+
+//#define MQTT_BASE_TOPIC "world/p14/sensors/entrance/"
+void mqttReconnect() {
+//  backToSystemPage();
+  // Loop until we're reconnected
+  while (!mqttClient.connected()) {
+    Serial.print("Attempting MQTT connection...");
+    led2Pulse(250);
+//    updateDisplay();
+    yield();
+
+    // boolean connect (clientID, willTopic, willQoS, willRetain, willMessage)
+    if (mqttClient.connect(hostName.c_str(), MQTT_ONLINE_TOPIC, 0, 1, MQTT_MSG_OFFLINE)) {
+      Serial.println("connected");
+      mqttClient.publish(MQTT_ONLINE_TOPIC, MQTT_MSG_ONLINE, true);
+      mqttClient.publish((mqttBaseTopic + "$id").c_str(), hostName.c_str(), true);
+      mqttClient.publish((mqttBaseTopic + "$ip").c_str(), WiFi.localIP().toString().c_str(), true);
+    } else {
+      Serial.print("failed, rc=");
+      Serial.print(mqttClient.state());
+      Serial.println(" try again in few seconds");
+//      updateDisplay();
+      for (int i = 0; i < 5; i++) {
+        led2Pulse(250);
+      }
+    }
+  }
+}
+
+
+
+//
+// about mqtt naming
+//
+// myhome/sensors/entrance/$online = online/offline
+// myhome/sensors/entrance/$id
+// myhome/sensors/entrance/$ip
+// myhome/sensors/entrance/$stats/uptime = seconds
+// myhome/sensors/entrance/$stats/signal = signal strength
+// myhome/sensors/entrance/$fw = firmware string
+
+// myhome/sensors/entrance/power/pulses_raw  = pulses;period
+// myhome/sensors/entrance/power/instant  = instant watts
+// myhome/sensors/entrance/power/usage = wh since last time
+// myhome/sensors/entrance/temperature  = temp
+// myhome/sensors/entrance/humidity  = temp
+// myhome/sensors/entrance/doorbell = dtm;photo
+
+// myhome/sensors/bathroom/water/pulses_raw = pulses_cold;pulses_hot;period
+
+// data to show:
+// myhome/presentation/power ///// ????
+// myhome/presentation/alert/
+
+//to read: http://tinkerman.cat/mqtt-topic-naming-convention/
+//https://harizanov.com/2014/09/mqtt-topic-tree-structure-improvements/
+//https://forum.mysensors.org/topic/4341/mqtt-messages-and-sensor-tree/4
+//https://hackaday.io/project/7342-mqopen/log/33302-mqtt-topic-structure-redesign
+
+//#define MQTT_BASE_TOPIC "world/p14/sensors/entrance/"
+
 void publishData() {
+  Serial.println("Publishing data ...");
   readyToPublishData = false;
 
+  cli();
+  power.pulsesKept += powerPulse.count;
+  power.secondsKept += MQTT_DATA_COLLECTION_PERIOD_SECS;
+  powerPulse.count = 0;
+  sei();
+  sprintf(tempBuffer32,"%d;%d", power.pulsesKept, power.secondsKept);
+  if (mqttClient.publish((mqttBaseTopic + "power/pulses_raw").c_str(), itoa(humidity, tempBuffer32, 10), false)) {
+    power.pulsesKept = power.secondsKept = 0;
+  } else {
+    Serial.println("MQTT publish fail");
+  }
 
-  // MQTT Conn check
+  mqttClient.publish((mqttBaseTopic + "temperature").c_str(), itoa(temperature, tempBuffer32, 10), true);
+  mqttClient.publish((mqttBaseTopic + "humidity").c_str(), itoa(humidity, tempBuffer32, 10), true);
 
-  //mqttClient.publish((mqttBaseTopics + TOPIC_TEMPERATURE).c_str(), String(temp).c_str(), true);
-  // setup payload
-  // send
-
+  mqttClient.publish((mqttBaseTopic + "$stats/uptime").c_str(), itoa(millis()/1000, tempBuffer32, 10), false);
+  mqttClient.publish((mqttBaseTopic + "$stats/signal").c_str(), itoa(getWifiQuality(), tempBuffer32, 10), false);
+  Serial.println("Publishing data finished.");
 }
 
 void loop() {
-    ArduinoOTA.handle();
-    if (!mqttClient.connected()) {
-      mqttReconnect();
-    }
-    mqttClient.loop();
-    yield();
-    powerCalculationLoop();
+  ledSet(digitalRead(PULSE_PIN));
+  led2On();
 
-    // Let's make sure frame transition is over
-    if (ui.getUiState()->frameState == FIXED) {
-      if (readyToPublishData) {
-        publishData();
-      }
-      if (readyForWeatherUpdate) {
-        updateData(&display);
-      }
-      #ifdef DHT_ON
-      if (readyForDHTUpdate) {
-        updateDHT();
-      }
-      #endif
-    }
+  ArduinoOTA.handle();
+  if (!mqttClient.connected()) {
+    mqttReconnect();
+  }
+  mqttClient.loop();
+  yield();
+  powerCalculationLoop();
 
-    int remainingTimeBudget = ui.update();
-    if (remainingTimeBudget > 0) {
-        delayMs(remainingTimeBudget);
+  // Let's make sure frame transition is over
+  if (ui.getUiState()->frameState == FIXED) {
+    if (readyToPublishData) {
+      publishData();
     }
+    if (readyForWeatherUpdate) {
+      updateData(&display);
+    }
+    #ifdef DHT_ON
+    if (readyForDHTUpdate) {
+      updateDHT();
+    }
+    #endif
+  }
+
+  int remainingTimeBudget = ui.update();
+  if (remainingTimeBudget > 0) {
+      delayMs(remainingTimeBudget);
+  }
 }
