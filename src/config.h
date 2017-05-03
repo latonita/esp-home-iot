@@ -21,7 +21,7 @@
 #define WIFI_PWD "MegaPass!"
 #define OTA_PASSWORD "Secret!"
 
-#define MQTT_BASE_TOPIC "world/p14/sensors/entrance/"
+#define MQTT_BASE_TOPIC "world/p14/sensors/entrance/" HOSTNAME_BASE "/"
 #define MQTT_SERVER "192.168.3.3"
 #define MQTT_PORT 1883
 

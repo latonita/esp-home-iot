@@ -61,6 +61,7 @@
 
 #include "LatonitaUtils.h"
 
+#include "ver.h"
 #include "config.h"
 
 
@@ -97,14 +98,13 @@ PubSubClient mqttClient(wifiClient);
  * DHT sensor
  **************************/
 #ifdef DHT_ON
-  char FormattedTemperature[10];
-  char FormattedHumidity[10];
-  // Initialize the temperature/ humidity sensor
   dht11 dht;
-  #define ALPHA 0.7
+  #define DHT_ALPHA 0.7
   bool dhtInitialized = false;
   float humidity = 0.0;
   float temperature = 0.0;
+  char formattedTemperature[10];
+  char formattedHumidity[10];
 #endif
 
 /***************************
@@ -246,13 +246,12 @@ void setupRegularActions() {
 }
 
 void printVersion() {
-  const char compileDate[] = __DATE__ " " __TIME__;
   Serial.println();
   Serial.println("===============================================================");
   Serial.println(": MQTT Pulse counter and MQTT display with OTA                :");
   Serial.println(": (c) Anton Viktorov, latonita@yandex.ru, github.com/latonita :");
   Serial.println("===============================================================");
-  Serial.printf("Compile date: %s\r\n", compileDate);
+  Serial.printf("Compile date: %s\r\n", __DATE__ " " __TIME__);
   Serial.printf("Module id: %s\r\n", hostName.c_str());
   Serial.printf("Wireless %s\r\n", WIFI_SSID);
   Serial.printf("MQTT server %s\r\n", MQTT_SERVER);
@@ -294,22 +293,6 @@ void initUi() {
   updateData(&display);
 }
 
-// void setupLed() {
-//   pinMode(LED_PIN, OUTPUT);
-//   digitalWrite(LED_PIN, LOW);
-// }
-//
-// static char ledState = LOW;
-// void changeLed() {
-//   ledState ^= HIGH;
-//   digitalWrite(LED_PIN, ledState);
-// }
-//
-// void setLed(char state) {
-//   ledState = state;
-//   digitalWrite(LED_PIN, ledState);
-// }
-
 void mqttReconnect();
 void setupMqtt() {
     Serial.println("Configuring MQTT server...");
@@ -346,7 +329,7 @@ void setupOta() {
   ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
     int p = progress / (total / 100);
     Serial.printf("OTA in progress: %u%%\r\n", p );
-    digitalWrite(LED_PIN, (p&1) ? LOW : HIGH);
+    led2Set((p&1) ? LOW : HIGH);
     display.drawProgressBar(4, 32, 120, 8, p );
     display.display();
   });
@@ -435,7 +418,7 @@ void formatInstantPower(double watts) {
 
 void powerCalculationLoop() {
   // today/y-day
-  unsigned long secondsOfDay = timeClient.getCurrentEpochWithUtcOffset()  % 86400L;
+  unsigned long secondsOfDay = timeClient.getCurrentEpochWithUtcOffset()  % 100; //% 86400L;
   if (power.lastSeconds > secondsOfDay) {
     power.lastSeconds = secondsOfDay;
     power.consumedYesterdaykWh = power.consumedTodaykWh;
@@ -478,6 +461,9 @@ void powerCalculationLoop() {
     Serial.printf("pulses kept: %d\r\n", power.pulsesKept);
     unsigned int wh = (powerPulse.count + power.pulsesKept) * 640 / 1000;
     Serial.printf("consumed energy: %d Wh\r\n", wh);
+    Serial.printf("consumed energy today: %d Wh\r\n", power.consumedTodaykWh);
+    Serial.printf("consumed energy y-day: %d Wh\r\n", power.consumedYesterdaykWh);
+
     Serial.println(getUpTime());
   }
 }
@@ -578,10 +564,10 @@ void drawIndoor(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int1
     display->setFont(ArialMT_Plain_10);
     display->drawString(64 + x, 0, "Indoor Sensor");
     display->setFont(ArialMT_Plain_16);
-    dtostrf(temperature,4, 1, FormattedTemperature);
-    display->drawString(64 + x, 12, "Temp: " + String(FormattedTemperature) + (IS_METRIC ? "°C" : "°F"));
-    dtostrf(humidity,4, 1, FormattedHumidity);
-    display->drawString(64 + x, 30, "Humidity: " + String(FormattedHumidity) + "%");
+    dtostrf(temperature,4, 1, formattedTemperature);
+    display->drawString(64 + x, 12, "Temp: " + String(formattedTemperature) + (IS_METRIC ? "°C" : "°F"));
+    dtostrf(humidity,4, 1, formattedHumidity);
+    display->drawString(64 + x, 30, "Humidity: " + String(formattedHumidity) + "%");
 }
 #endif
 
@@ -682,8 +668,8 @@ void updateDHT() {
   readyForDHTUpdate = false;
   if (DHTLIB_OK == dht.read(DHT_PIN)) {
     Serial.print("DHT read: "); Serial.print(dht.temperature); Serial.print("C "); Serial.print(dht.humidity); Serial.println("\%");
-    humidity = !dhtInitialized ? dht.humidity : ALPHA * humidity + (1 - ALPHA) * (float)dht.humidity;
-    temperature = !dhtInitialized ? dht.temperature : ALPHA * temperature + (1 - ALPHA) * (float)dht.temperature;
+    humidity = !dhtInitialized ? dht.humidity : DHT_ALPHA * humidity + (1 - DHT_ALPHA) * (float)dht.humidity;
+    temperature = !dhtInitialized ? dht.temperature : DHT_ALPHA * temperature + (1 - DHT_ALPHA) * (float)dht.temperature;
     dhtInitialized = true;
   } else {
     Serial.println("DHT reading failure.");
