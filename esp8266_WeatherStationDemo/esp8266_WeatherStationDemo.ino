@@ -56,6 +56,8 @@
 #include <WiFiUdp.h>      //For OTA
 #include <ArduinoOTA.h>   //For OTA
 
+#include "LatonitaUtils.h"
+
 /***************************
  * Features on/off
  **************************/
@@ -222,7 +224,7 @@ Ticker ticker;
 void drawProgress(OLEDDisplay *display, int percentage, String label);
 void updateData(OLEDDisplay *display);
 void drawDateTime(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y);
-void drawKWH(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y);
+void drawInstantPower(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y);
 void drawCurrentWeather(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y);
 void drawForecast(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y);
 #ifdef DHT_ON
@@ -241,7 +243,7 @@ void setReadyForDHTUpdate();
 // Add frames
 // this array keeps function pointers to all frames
 // frames are the single views that slide from right to left
-FrameCallback frames[] = { drawDateTime, drawKWH, drawCurrentWeather, drawForecast
+FrameCallback frames[] = { drawDateTime, drawInstantPower, drawCurrentWeather, drawForecast
 #ifdef DHT_ON
                            , drawIndoor
 #endif
@@ -254,13 +256,12 @@ int numberOfFrames = (sizeof(frames) / sizeof(FrameCallback));
 OverlayCallback overlays[] = { drawHeaderOverlay };
 int numberOfOverlays = 1;
 
-
 // The interrupt routine - runs each time a falling edge of a pulse is detected
 void onPowerPulse() {
     lastTime = pulseTime;      //used to measure time between pulses.
     pulseTime = micros();
     pulseCount++;                                                    //pulseCounter
-    emontx.power = int((3600000000.0 / (pulseTime - lastTime)) / ppwh); //Calculate power
+//    emontx.power = int((3600000000.0 / (pulseTime - lastTime)) / ppwh); //Calculate power
 }
 
 void setupPowerPulsesCounting() {
@@ -282,8 +283,8 @@ void printVersion() {
   Serial.println(": MQTT Pulse counter and MQTT display with OTA                :");
   Serial.println(": (c) Anton Viktorov, latonita@yandex.ru, github.com/latonita :");
   Serial.println("===============================================================");
-  Serial.print("Compile Date: "); Serial.println(compileDate);
-  Serial.print("Module Id: "); Serial.println(hostName);
+  Serial.printf("Compile Date: %s\r\n", compileDate);
+  Serial.printf("Module Id: %s\r\n", hostName.c_str());
 }
 void initDisplay() {
   // initialize dispaly
@@ -297,7 +298,7 @@ void initDisplay() {
 }
 
 void initUi() {
-  Serial.println("UI Init..");
+  Serial.println("UI Init...");
   ui.setTargetFPS(30);
   //ui.setActiveSymbol(activeSymbole);
   //ui.setInactiveSymbol(inactiveSymbole);
@@ -355,7 +356,6 @@ void setupOta() {
   ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
     int p = progress / (total / 100);
     Serial.printf("OTA in progress: %u%%\r\n", p );
-//    digitalWrite(WIFI_LED_PIN,p%2>0?LOW:HIGH);
     display.drawProgressBar(4, 32, 120, 8, p );
     display.display();
   });
@@ -375,6 +375,18 @@ void setupOta() {
   Serial.println(" Done.");
 }
 
+// converts the dBm to a range between 0 and 100%
+int8_t getWifiQuality() {
+    int32_t dbm = WiFi.RSSI();
+    if(dbm <= -100) {
+        return 0;
+    } else if(dbm >= -50) {
+        return 100;
+    } else {
+        return 2 * (dbm + 100);
+    }
+}
+
 void setupWifi() {
   WiFi.hostname(hostName);
   WiFi.begin(WIFI_SSID, WIFI_PWD);
@@ -390,7 +402,6 @@ void setupWifi() {
       display.drawXbm(60, 30, 8, 8, counter % 3 == 1 ? activeSymbole : inactiveSymbole);
       display.drawXbm(74, 30, 8, 8, counter % 3 == 2 ? activeSymbole : inactiveSymbole);
       display.display();
-
       counter++;
       //todo: check if we cant connect for too long. options - reboot, buzz, setup own wifi?
   }
@@ -415,57 +426,29 @@ void setup() {
     Serial.println("Setup finished.");
 }
 
-void loop() {
-    ArduinoOTA.handle();
+void formatInstandPower(int watts) {
+  if (instantPower < 10) {
+    sprintf(formattedInstantPower, "-- W");
+  } else if (instantPower < 1000) {
 
-    if (!mqttClient.connected()) {
-      mqttReconnect();
-    }
-    mqttClient.loop();
-    yield();
+  }
+}
 
-    //emontx.pulse = pulseCount;
-    emontx.pulse += pulseCount;
-    pulseCount = 0;
-
-    if (readyToPublishData && ui.getUiState()->frameState == FIXED) {
-        publishData();
-    }
-
-    if (readyForWeatherUpdate && ui.getUiState()->frameState == FIXED) {
-        updateData(&display);
-    }
-
-#ifdef DHT_ON
-    if (readyForDHTUpdate && ui.getUiState()->frameState == FIXED) {
-        updateDHT();
-    }
-#endif
-
-    int remainingTimeBudget = ui.update();
-
-    if (remainingTimeBudget > 0) {
-        // You can do some work here
-        // Don't do stuff if you are below your
-        // time budget.
-        delay(remainingTimeBudget);
-    }
-
-    static unsigned long m = 0;
-    if (m + 1000 < millis()) {
-      m = millis();
-
-      emontx.power = instantPower = int((3600000000.0 / (micros() - lastTime)) / ppwh); //Calculate power
-      // if (micros() - lastTime > 30*1000) {
-      //   formattedInstantPower[0] = '-';
-      //   formattedInstantPower[1] = '-';
-      //   formattedInstantPower[2] = 0;
-      // } else {
-        instantPower /= 10;
-        instantPower *= 10;
-        dtostrf(instantPower, 4, 0, formattedInstantPower);
-      // }
-    }
+void powerCalculationLoop() {
+  //emontx.pulse = pulseCount;
+  emontx.pulse += pulseCount;
+  pulseCount = 0;
+  // 640 p per 1kWh => 1p = 1.5625 Watt
+  float wattsSpent = 1.5625 * p;
+  //int instantPower = 1000 * 3600 * p / (s * 640);
+  static unsigned long m = 0;
+  if (millis() > m + 1000) {
+    m = millis();
+    emontx.power = instantPower = int((3600000000.0 / (micros() - lastTime)) / ppwh); //Calculate power
+    instantPower /= 10;
+    instantPower *= 10;
+    dtostrf(instantPower, 4, 0, formattedInstantPower);
+  }
 }
 
 void mqttReconnect() {
@@ -540,14 +523,13 @@ void drawDateTime(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, in
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 }
 
-void drawKWH(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y) {
+void drawInstantPower(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y) {
     display->setFont(ArialMT_Plain_10);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->drawString(42 + x, 5 + y, "Instant power");
 
-    String temp = String(formattedInstantPower) + " W";
     display->setFont(ArialMT_Plain_24);
-    display->drawString(42 + x, 15 + y, temp);
+    display->drawString(42 + x, 15 + y, formattedInstantPower);
     //int tempWidth = display->getStringWidth(temp);
 
     display->drawXbm(0 + x, 5 + y, zap_width, zap_height, zap1);
@@ -573,7 +555,6 @@ void drawCurrentWeather(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t
     int weatherIconWidth = display->getStringWidth(weatherIcon);
     display->drawString(32 + x - weatherIconWidth / 2, 05 + y, weatherIcon);
 }
-
 
 void drawForecast(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y) {
     drawForecastDetails(display, x, y, 0);
@@ -620,18 +601,6 @@ void drawForecastDetails(OLEDDisplay *display, int x, int y, int dayIndex) {
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 }
 
-// converts the dBm to a range between 0 and 100%
-int8_t getWifiQuality() {
-    int32_t dbm = WiFi.RSSI();
-    if(dbm <= -100) {
-        return 0;
-    } else if(dbm >= -50) {
-        return 100;
-    } else {
-        return 2 * (dbm + 100);
-    }
-}
-
 void drawHeaderOverlay(OLEDDisplay *display, OLEDDisplayUiState* state) {
     display->setColor(WHITE);
     display->setFont(ArialMT_Plain_10);
@@ -641,8 +610,7 @@ void drawHeaderOverlay(OLEDDisplay *display, OLEDDisplayUiState* state) {
     display->drawString(0, 54, time);
 
     display->setTextAlignment(TEXT_ALIGN_CENTER);
-    String temp = String(formattedInstantPower) + "W";
-    display->drawString(64, 54, temp);
+    display->drawString(64, 54, formattedInstantPower);
 
     display->setTextAlignment(TEXT_ALIGN_RIGHT);
     temp = wunderground.getCurrentTemp() + "°C";
@@ -722,4 +690,34 @@ void publishData() {
   // setup payload
   // send
 
+}
+
+void loop() {
+    ArduinoOTA.handle();
+    if (!mqttClient.connected()) {
+      mqttReconnect();
+    }
+    mqttClient.loop();
+    yield();
+    powerCalculationLoop();
+
+    // Let's make sure frame transition is over
+    if (ui.getUiState()->frameState == FIXED) {
+      if (readyToPublishData) {
+        publishData();
+      }
+      if (readyForWeatherUpdate) {
+        updateData(&display);
+      }
+      #ifdef DHT_ON
+      if (readyForDHTUpdate) {
+        updateDHT();
+      }
+      #endif
+    }
+
+    int remainingTimeBudget = ui.update();
+    if (remainingTimeBudget > 0) {
+        delayMs(remainingTimeBudget);
+    }
 }
