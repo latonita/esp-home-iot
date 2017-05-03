@@ -196,38 +196,92 @@ int numberOfOverlays = 1;
 /***************************
  * Power counting
  **************************/
-typedef struct {
-  unsigned long count = 0;
-  unsigned long timeMicros = 0;
-  unsigned long lastTimeMicros = 0;
-} PulseParamISR;
-volatile PulseParamISR powerPulse;
+unsigned int getSecondsOfDay();
+
+#define POWER_ROLLUP_PERIOD_SEC 10
+#define ppwh 1.5625 //(1000/640)
+#define whpp 0.64 //(640/1000)
 
 typedef struct {
+  typedef struct {
+    unsigned long count = 0;
+    unsigned long timeMicros = 0;
+    unsigned long lastTimeMicros = 0;
+  } PulseParamISR;
+  volatile PulseParamISR pulse;
+
+  unsigned int pulsesLast = 0;
   unsigned int pulsesKept = 0;
   unsigned int secondsKept = 0;
 
-  unsigned int instantWatts = 0;
-  unsigned int consumedkWh = 0;
+  unsigned int pulsesToday = 0;
+
+  void clearKept() {
+    pulsesKept = secondsKept = 0;
+  };
+
+  void addPulses() {
+    cli();
+    pulsesLast = pulse.count;
+    pulsesKept += pulse.count;
+    pulsesToday += pulse.count;
+    pulse.count = 0;
+    sei();
+    secondsKept += MQTT_DATA_COLLECTION_PERIOD_SECS;
+ }
+
+  double instantWatts = 0;
+  double consumedkWh = 0;
 
   unsigned int consumedTodaykWh = 0;
   unsigned int consumedYesterdaykWh = 0;
   unsigned long lastSeconds = 0;
+
+  char updatePower() {
+    addPulses();
+    static char firstRun = 1;
+    static unsigned long m = 0;
+    //rollup every x seconds
+    if (millis() > m + POWER_ROLLUP_PERIOD_SEC * 1000) {
+      m = millis();
+
+      // today/y-day rollup
+      unsigned int secondsOfDay = getSecondsOfDay();
+      if (lastSeconds > secondsOfDay) {
+        consumedYesterdaykWh = consumedTodaykWh;
+        consumedTodaykWh = 0;
+        pulsesToday = 0;
+      }
+      lastSeconds = secondsOfDay;
+      consumedTodaykWh = pulsesToday * whpp;
+
+      // instant power calculation.
+      // first time. rollover is not a problem
+      if (pulse.lastTimeMicros == 0) {
+        instantWatts = 0;
+      } else {
+        instantWatts = int((3600000000.0 / (micros() - pulse.lastTimeMicros)) / ppwh); //Calculate power
+      }
+      return true;
+    } else {
+      return false;
+    }
+  }
+
 } PowerDisplay;
 PowerDisplay power;
 
 char formattedInstantPower[10];
 static char tempBuffer32[32];
 
-
 // The interrupt routine - runs each time a falling edge of a pulse is detected
 #define PULSE_DEBOUNCE 100000L
 void onPowerPulseISR() {
   if (digitalRead(PULSE_PIN) == LOW) {
-    if(micros() >= powerPulse.timeMicros + PULSE_DEBOUNCE ) {
-      powerPulse.count++;
-      powerPulse.lastTimeMicros = powerPulse.timeMicros;      //used to measure time between pulses.
-      powerPulse.timeMicros = micros();
+    if(micros() >= power.pulse.timeMicros + PULSE_DEBOUNCE ) {
+      power.pulse.count++;
+      power.pulse.lastTimeMicros = power.pulse.timeMicros;      //used to measure time between pulses.
+      power.pulse.timeMicros = micros();
     }
   }
 }
@@ -404,7 +458,7 @@ void setup() {
   Serial.println("Setup finished.");
 }
 
-void formatInstantPower(double watts) {
+char* formatInstantPower(double watts) {
   if (watts < 10) {
     sprintf(formattedInstantPower, "-- W");
   } else if (watts < 1000) {
@@ -414,53 +468,23 @@ void formatInstantPower(double watts) {
     dtostrf(watts/1000, 4, 1, tempBuffer32);
     sprintf(formattedInstantPower, "%s kW", tempBuffer32);
   }
+  return formattedInstantPower;
+}
+
+unsigned int getSecondsOfDay() {
+  return timeClient.getCurrentEpochWithUtcOffset() % 86400L;
 }
 
 void powerCalculationLoop() {
-  // today/y-day
-  unsigned long secondsOfDay = timeClient.getCurrentEpochWithUtcOffset()  % 100; //% 86400L;
-  if (power.lastSeconds > secondsOfDay) {
-    power.lastSeconds = secondsOfDay;
-    power.consumedYesterdaykWh = power.consumedTodaykWh;
-    power.consumedTodaykWh = 0;
-  }
 
-  // calc power consumption
-  // 640 p per 1kWh => 1p = 1.5625 Wh
-  //                   1Wh = 0.640p
-  #define ppwh (1000/640)
-  #define whpp (640/1000)
-
-//  float wattsSpent = 1.5625 * (power.pulsesKept + powerPulse.count);
-
-
-  //    emontx.power = int((3600000000.0 / (pulseTime - lastTime)) / ppwh); //Calculate power
-  //int instantPower = 1000 * 3600 * p / (s * 640);
-  //  unsigned int instantWatts = 0;
-
-//pulses per watt hour
-
-  static char firstRun = 1;
-  static double watts = 0;
-  static unsigned long m = 0;
-  if (millis() > m + 15*1000) {
-    m = millis();
-
-    // first time. rollover is not a problem
-    if (powerPulse.lastTimeMicros == 0) {
-      watts = 0;
-    } else {
-      watts = int((3600000000.0 / (micros() - powerPulse.lastTimeMicros)) / ppwh); //Calculate power
-    }
-    formatInstantPower(watts);
-
-    //debug
+  if (power.updatePower()) {
+    formatInstantPower(power.instantWatts);
+    // debug
     Serial.printf("-------\r\n");
     Serial.printf("insta watt: %s\r\n",formattedInstantPower);
-    Serial.printf("pulses: %d\r\n", powerPulse.count);
+    Serial.printf("pulses: %d\r\n", power.pulse.count);
     Serial.printf("pulses kept: %d\r\n", power.pulsesKept);
-    unsigned int wh = (powerPulse.count + power.pulsesKept) * 640 / 1000;
-    Serial.printf("consumed energy: %d Wh\r\n", wh);
+    Serial.printf("consumed energy: %d Wh\r\n", power.consumedkWh);
     Serial.printf("consumed energy today: %d Wh\r\n", power.consumedTodaykWh);
     Serial.printf("consumed energy y-day: %d Wh\r\n", power.consumedYesterdaykWh);
 
@@ -747,14 +771,10 @@ void publishData() {
   Serial.println("Publishing data ...");
   readyToPublishData = false;
 
-  cli();
-  power.pulsesKept += powerPulse.count;
-  power.secondsKept += MQTT_DATA_COLLECTION_PERIOD_SECS;
-  powerPulse.count = 0;
-  sei();
+  power.addPulses();
   sprintf(tempBuffer32,"%d;%d", power.pulsesKept, power.secondsKept);
   if (mqttClient.publish((mqttBaseTopic + "power/pulses_raw").c_str(), itoa(humidity, tempBuffer32, 10), false)) {
-    power.pulsesKept = power.secondsKept = 0;
+    power.clearKept();
   } else {
     Serial.println("MQTT publish fail");
   }
