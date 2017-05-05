@@ -7,7 +7,7 @@
 //
 
 #include "dht_util.hpp"
-#include "latonita_utils.h"
+#include "utils.h"
 
 dht_util::dht_util(char pin) : pin(pin) {}
 dht_util::~dht_util() {}

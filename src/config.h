@@ -15,7 +15,8 @@
 /***************************
  * Connection params
  **************************/
-#define HOSTNAME_BASE "espnode-"
+#define HOSTNAME_BASE "espnode"
+#define HOSTNAME_DOMAIN ".local"
 
 #define WIFI_SSID "LAWIRELESS"
 #define WIFI_PWD "MegaPass!"
@@ -36,8 +37,8 @@
 #define DHT_UPDATE_INTERVAL_SECS 1 * 60 // read from DHT sensor
 
 /***************************
-* Features on/off
-**************************/
+ * Features on/off
+ **************************/
 #define DHT_ON
 #undef THINGSPEAK_ON
 

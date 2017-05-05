@@ -39,9 +39,10 @@
    // Please read http://blog.squix.org/weatherstation-getting-code-adapting-it
    // for setup instructions
  */
+#include "esp.hpp"
+
 #include <Arduino.h>
 
-#include <ESP8266WiFi.h>
 #include <Ticker.h>
 #include <JsonListener.h>
 #include <SSD1306Wire.h>
@@ -59,10 +60,9 @@
 #include "res/WeatherStationImages.h"
 #include "res/LatonitaIcons.h"
 
-#include "latonita_utils.h"
+#include "utils.h"
 #include "ver.h"
 #include "config.h"
-
 
 #ifdef DHT_ON
   #include "dht_util.hpp"
@@ -72,18 +72,7 @@
   #include "ThingspeakClient.h"
 #endif
 
-#define ledOn() digitalWrite(LED_PIN,HIGH)
-#define ledOff() digitalWrite(LED_PIN,LOW)
-#define ledSet(x) digitalWrite(LED_PIN,x)
-#define ledPulse(x) ledOn(); delayMs(2 * x / 3); ledOff(); delayMs(x / 3)
-#define setupLed() pinMode(LED_PIN,OUTPUT); ledOff()
-
-#define led2On() digitalWrite(LED_PIN2,HIGH)
-#define led2Off() digitalWrite(LED_PIN2,LOW)
-#define led2Set(x) digitalWrite(LED_PIN2,x)
-#define led2Pulse(x) led2On(); delayMs(2 * x / 3); led2Off(); delayMs(x / 3)
-#define setupLed2() pinMode(LED_PIN,OUTPUT); led2Off()
-
+Esp * me = Esp::me();
 
 /***************************
  * DHT
@@ -92,13 +81,6 @@
 dht_util dht(DHT_PIN);
  #endif
 
-/***************************
- * Network
- **************************/
-String hostName(HOSTNAME_BASE);
-WiFiClient wifiClient;
-WiFiServer TelnetServer(8266); // Necesary to make Arduino Software autodetect OTA device
-PubSubClient mqttClient(wifiClient);
 
 /***************************
  * TimeClient
@@ -259,7 +241,6 @@ typedef struct {
             return false;
         }
     }
-
 } PowerDisplay;
 PowerDisplay power;
 
@@ -289,20 +270,6 @@ void setupRegularActions() {
   #ifdef DHT_ON
     addRegularAction(DHT_UPDATE_INTERVAL_SECS, setReadyForDHTUpdate);
   #endif
-}
-
-void printVersion() {
-    Serial.println();
-    Serial.println("===============================================================");
-    Serial.println(": MQTT Pulse counter and MQTT display with OTA                :");
-    Serial.println(": (c) Anton Viktorov, latonita@yandex.ru, github.com/latonita :");
-    Serial.println("===============================================================");
-    Serial.printf("Compile date: %s\r\n", __DATE__ " " __TIME__);
-    Serial.printf("Module id: %s\r\n", hostName.c_str());
-    Serial.printf("Wireless %s\r\n", WIFI_SSID);
-    Serial.printf("MQTT server %s\r\n", MQTT_SERVER);
-    Serial.printf("MQTT topic %s\r\n", MQTT_BASE_TOPIC);
-    Serial.println("===============================================================");
 }
 
 void initDisplay() {
@@ -339,126 +306,16 @@ void initUi() {
     updateData(&display);
 }
 
-void mqttReconnect();
-void setupMqtt() {
-    Serial.println("Configuring MQTT server...");
-    mqttClient.setServer(MQTT_SERVER, MQTT_PORT);
-    Serial.printf("MQTT server IP: %s\r\n", MQTT_SERVER);
-    Serial.println("MQTT configured!");
-    mqttReconnect();
-}
 
-void setupOta() {
-    Serial.print("Configuring OTA device...");
-
-    TelnetServer.begin(); //Necesary to make Arduino Software autodetect OTA device
-
-    ArduinoOTA.onStart([]() {
-        Serial.println("OTA starting...");
-        display.clear();
-        display.setFont(ArialMT_Plain_10);
-        display.setTextAlignment(TEXT_ALIGN_CENTER_BOTH);
-        display.drawString(DISPLAY_WIDTH / 2, DISPLAY_HEIGHT / 2 - 10, "OTA Update");
-        display.display();
-    });
-
-    ArduinoOTA.onEnd([]() {
-        Serial.println("OTA update finished!");
-        Serial.println("Rebooting...");
-        display.clear();
-        display.setFont(ArialMT_Plain_10);
-        display.setTextAlignment(TEXT_ALIGN_CENTER_BOTH);
-        display.drawString(DISPLAY_WIDTH / 2, DISPLAY_HEIGHT / 2, "Restart");
-        display.display();
-    });
-
-    ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
-        int p = progress / (total / 100);
-        Serial.printf("OTA in progress: %u%%\r\n", p );
-        led2Set((p & 1) ? LOW : HIGH);
-        display.drawProgressBar(4, 32, 120, 8, p );
-        display.display();
-    });
-
-    ArduinoOTA.onError([](ota_error_t error) {
-        Serial.printf("Error[%u]: ", error);
-        if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
-        else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
-        else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
-        else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
-        else if (error == OTA_END_ERROR) Serial.println("End Failed");
-    });
-
-    ArduinoOTA.setPassword((const char *)OTA_PASSWORD);
-    ArduinoOTA.setHostname(hostName.c_str());
-    ArduinoOTA.begin();
-    Serial.println(" Done.");
-}
-
-// converts the dBm to a range between 0 and 100%
-int8_t getWifiQuality() {
-    int32_t dbm = WiFi.RSSI();
-    if(dbm <= -100) {
-        return 0;
-    } else if(dbm >= -50) {
-        return 100;
-    } else {
-        return 2 * (dbm + 100);
-    }
-}
-
-void setupWifi() {
-    WiFi.hostname(hostName);
-    WiFi.begin(WIFI_SSID, WIFI_PWD);
-
-    Serial.print("Connecting to WiFi..");
-    int counter = 0;
-    while (WiFi.status() != WL_CONNECTED) {
-        led2Pulse(250);
-        yield();
-        Serial.print(".");
-        display.clear();
-        display.drawString(64, 10, "Connecting to WiFi");
-        display.drawXbm(46, 30, 8, 8, counter % 3 == 0 ? activeSymbole : inactiveSymbole);
-        display.drawXbm(60, 30, 8, 8, counter % 3 == 1 ? activeSymbole : inactiveSymbole);
-        display.drawXbm(74, 30, 8, 8, counter % 3 == 2 ? activeSymbole : inactiveSymbole);
-        display.display();
-        counter++;
-        //todo: check if we cant connect for too long. options - reboot, buzz, setup own wifi?
-    }
-    Serial.println();
-    Serial.print("Got IP Address: ");
-    Serial.println(WiFi.localIP());
-}
-void setup() {
-    setupLed();
-    setupLed2();
-    led2Pulse(100); led2Pulse(100); led2Pulse(100); led2Pulse(100);
-
-    hostName += String(ESP.getChipId(), HEX);
-    Serial.begin(SERIAL_BAUD_RATE);
-    delayMs(50);
-    printVersion();
-    Serial.println("Entering setup.");
-    initDisplay();
-    setupWifi();
-    setupOta();
-    setupMqtt();
-    initUi();
-    setupPowerPulsesCounting();
-    setupRegularActions();
-    Serial.println("Setup finished.");
-}
-
-char* formatInstantPower(double watts) {
+char* formatInstantPowerW(double watts) {
     if (watts < 10) {
         sprintf(formattedInstantPower, "-- W");
     } else if (watts < 1000) {
-        dtostrf(watts, 4, 0, tempBuffer32);
-        sprintf(formattedInstantPower, "%s W", tempBuffer32);
+        sprintf(formattedInstantPower, "%d W", watts);
+    } else if (watts < 1000000) {
+        sprintf(formattedInstantPower, "%s kW", formatDouble41(watts / 1000));
     } else {
-        dtostrf(watts / 1000, 4, 1, tempBuffer32);
-        sprintf(formattedInstantPower, "%s kW", tempBuffer32);
+        sprintf(formattedInstantPower, "9999 kW");
     }
     return formattedInstantPower;
 }
@@ -470,7 +327,7 @@ unsigned int getSecondsOfDay() {
 void powerCalculationLoop() {
 
     if (power.updatePower()) {
-        formatInstantPower(power.instantWatts);
+        formatInstantPowerW(power.instantWatts);
         // debug
         Serial.printf("-------\r\n");
         Serial.printf("insta watt: %s\r\n",formattedInstantPower);
@@ -677,58 +534,29 @@ void setReadyToPublishData() {
     readyToPublishData = true;
 }
 
-const static String mqttBaseTopic = MQTT_BASE_TOPIC;
-
-#define MQTT_ONLINE_TOPIC MQTT_BASE_TOPIC "$online"
-#define MQTT_MSG_ONLINE "online"
-#define MQTT_MSG_OFFLINE "offline"
 
 //#define MQTT_BASE_TOPIC "world/p14/sensors/entrance/"
-void mqttReconnect() {
-//  backToSystemPage();
-// Loop until we're reconnected
-    while (!mqttClient.connected()) {
-        Serial.print("Attempting MQTT connection...");
-        led2Pulse(250);
-//    updateDisplay();
-        yield();
 
-        // boolean connect (clientID, willTopic, willQoS, willRetain, willMessage)
-        if (mqttClient.connect(hostName.c_str(), MQTT_ONLINE_TOPIC, 0, 1, MQTT_MSG_OFFLINE)) {
-            Serial.println("connected");
-            mqttClient.publish(MQTT_ONLINE_TOPIC, MQTT_MSG_ONLINE, true);
-            mqttClient.publish((mqttBaseTopic + "$id").c_str(), hostName.c_str(), true);
-            mqttClient.publish((mqttBaseTopic + "$ip").c_str(), WiFi.localIP().toString().c_str(), true);
-        } else {
-            Serial.print("failed, rc=");
-            Serial.print(mqttClient.state());
-            Serial.println(" try again in few seconds");
-//      updateDisplay();
-            for (int i = 0; i < 5; i++) {
-                led2Pulse(250);
-            }
-        }
-    }
-}
+
 
 
 
 //
 // about mqtt naming
 //
-// myhome/sensors/entrance/$online = online/offline
-// myhome/sensors/entrance/$id
-// myhome/sensors/entrance/$ip
-// myhome/sensors/entrance/$stats/uptime = seconds
-// myhome/sensors/entrance/$stats/signal = signal strength
-// myhome/sensors/entrance/$fw = firmware string
+// location/myhome/entrance/sensor/entrance/$online = online/offline
+// location/myhome/entrance/sensor/entrance/$id
+// location/myhome/entrance/sensor/entrance/$ip
+// location/myhome/entrance/sensor/entrance/$stats/uptime = seconds
+// location/myhome/entrance/sensor/entrance/$stats/signal = signal strength
+// location/myhome/entrance/sensor/entrance/$fw = firmware string
 
-// myhome/sensors/entrance/power/pulses_raw  = pulses;period
-// myhome/sensors/entrance/power/instant  = instant watts
-// myhome/sensors/entrance/power/usage = wh since last time
-// myhome/sensors/entrance/temperature  = temp
-// myhome/sensors/entrance/humidity  = temp
-// myhome/sensors/entrance/doorbell = dtm;photo
+// location/myhome/entrance/sensor/entrance/power/pulses_raw  = pulses;period
+// location/myhome/entrance/sensor/entrance/power/instant  = instant watts
+// location/myhome/entrance/sensor/entrance/power/usage = wh since last time
+// location/myhome/entrance/sensor/entrance/temperature  = temp
+// location/myhome/entrance/sensor/entrance/humidity  = temp
+// location/myhome/entrance/sensor/entrance/doorbell = dtm;photo
 
 // myhome/sensors/bathroom/water/pulses_raw = pulses_cold;pulses_hot;period
 
@@ -749,30 +577,92 @@ void publishData() {
 
     power.addPulses();
     sprintf(tempBuffer32,"%d;%d", power.pulsesKept, power.secondsKept);
-    if (mqttClient.publish((mqttBaseTopic + "power/pulses_raw").c_str(), tempBuffer32, false)) {
+    if (me->mqttPublish("power/pulses_raw", tempBuffer32, false)) {
         power.clearKept();
     } else {
         Serial.println("MQTT publish fail");
     }
 
-    mqttClient.publish((mqttBaseTopic + "temperature").c_str(), dht.formattedTemperature(), true);
-    mqttClient.publish((mqttBaseTopic + "humidity").c_str(), dht.formattedHumidity(), true);
-
-    mqttClient.publish((mqttBaseTopic + "$stats/uptime").c_str(), formatInteger(millis() / 1000), false);
-    mqttClient.publish((mqttBaseTopic + "$stats/signal").c_str(), formatInteger(getWifiQuality()), false);
+    me->mqttPublish("temperature", dht.formattedTemperature(), true);
+    me->mqttPublish("humidity", dht.formattedHumidity(), true);
 
     Serial.println("Publishing data finished.");
+}
+
+void onMqttEvent(Esp::MqttEvent event, const char* topic, const char* message) {
+    switch(event) {
+        case Esp::MqttEvent::CONNECT:
+            //subscribe to what we need
+            break;
+        case Esp::MqttEvent::DISCONNECT:
+            break;
+        case Esp::MqttEvent::MESSAGE:
+            // message came
+            break;
+    }
+}
+
+void setupNetworkHandlers() {
+    me->registerWifiHandler([](Esp::WifiEvent e, int counter) {
+        if (e == Esp::WifiEvent::CONNECTING) {
+            led2Pulse(250);
+            display.clear();
+            display.drawString(64, 10, "Connecting to WiFi");
+            display.drawXbm(46, 30, 8, 8, counter % 3 == 0 ? activeSymbole : inactiveSymbole);
+            display.drawXbm(60, 30, 8, 8, counter % 3 == 1 ? activeSymbole : inactiveSymbole);
+            display.drawXbm(74, 30, 8, 8, counter % 3 == 2 ? activeSymbole : inactiveSymbole);
+            display.display();
+        }
+    });
+    me->registerOtaHandlers([]() {
+        display.clear();
+        display.setFont(ArialMT_Plain_10);
+        display.setTextAlignment(TEXT_ALIGN_CENTER_BOTH);
+        display.drawString(DISPLAY_WIDTH / 2, DISPLAY_HEIGHT / 2 - 10, "OTA Update");
+        display.display();
+    },[]() {
+        display.clear();
+        display.setFont(ArialMT_Plain_10);
+        display.setTextAlignment(TEXT_ALIGN_CENTER_BOTH);
+        display.drawString(DISPLAY_WIDTH / 2, DISPLAY_HEIGHT / 2, "Restart");
+        display.display();
+    },[](unsigned int progress, unsigned int total) {
+        int p = progress / (total / 100);
+        led2Set((p & 1) ? LOW : HIGH);
+        display.drawProgressBar(4, 32, 120, 8, p );
+        display.display();
+    },NULL);
+    me->addMqttEventHandler(onMqttEvent);
+}
+
+void setupHardware() {
+    setupLed();
+    setupLed2();
+
+    initDisplay();
+}
+
+void setup() {
+    Serial.println("Entering setup.");
+    Serial.begin(SERIAL_BAUD_RATE);
+    delayMs(50);
+    me->setup();
+
+    setupHardware();
+    setupNetworkHandlers();
+    me->startNetworkStack();
+    initUi();
+    setupPowerPulsesCounting();
+    setupRegularActions();
+    Serial.println("Setup finished.");
 }
 
 void loop() {
     ledSet(digitalRead(PULSE_PIN));
     led2On();
 
-    ArduinoOTA.handle();
-    if (!mqttClient.connected()) {
-        mqttReconnect();
-    }
-    mqttClient.loop();
+    me->loop();
+
     yield();
     powerCalculationLoop();
 

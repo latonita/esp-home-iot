@@ -1,7 +1,7 @@
 #ifndef _LATONITA_UTILS_C_
 #define _LATONITA_UTILS_C_
 
-#include "latonita_utils.h"
+#include "utils.h"
 
 char * secondsToString(unsigned long t) {
     static char str[12];
