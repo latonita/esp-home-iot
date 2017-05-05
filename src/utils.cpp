@@ -14,7 +14,14 @@ char * secondsToString(unsigned long t) {
 }
 
 char * getUpTime() {
-    return secondsToString(millis() / 1000);
+    static unsigned long last_millis = 0;
+    static unsigned char overflow = 0;
+    unsigned long now = millis();
+    if (now < last_millis) {
+        overflow++;
+    }
+    last_millis = now;
+    return secondsToString((now / 1000) + (MAX_UPTIME / 1000) * overflow);
 }
 
 void delayMicros(uint32_t us){

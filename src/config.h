@@ -12,17 +12,20 @@
 
 #define I2C_DISPLAY_ADDRESS 0x3c
 
+#define LED1 LED_PIN
+#define LED2 LED_PIN2
+
 /***************************
  * Connection params
  **************************/
 #define HOSTNAME_BASE "espnode"
-#define HOSTNAME_DOMAIN ".local"
+#define HOSTNAME_DOMAIN ".lan"
 
 #define WIFI_SSID "LAWIRELESS"
 #define WIFI_PWD "MegaPass!"
 #define OTA_PASSWORD "Secret!"
 
-#define MQTT_BASE_TOPIC "world/p14/sensors/entrance/" HOSTNAME_BASE "/"
+#define MQTT_BASE_TOPIC_TEMPLATE "location/myhome/entrance/sensor/%s/"
 #define MQTT_SERVER "192.168.3.3"
 #define MQTT_PORT 1883
 

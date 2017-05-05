@@ -43,7 +43,6 @@
 
 #include <Arduino.h>
 
-#include <Ticker.h>
 #include <JsonListener.h>
 #include <SSD1306Wire.h>
 #include <OLEDDisplayUi.h>
@@ -117,7 +116,6 @@ OLEDDisplayUi ui( &display );
 /***************************
  * Ticker and flags
  **************************/
-#define addRegularAction(x, y) { Ticker* t = new Ticker(); t->attach(x,y);}
 
 bool readyToPublishData = false;
 void setReadyToPublishData();
@@ -265,10 +263,10 @@ void setupPowerPulsesCounting() {
 }
 
 void setupRegularActions() {
-    addRegularAction(MQTT_DATA_COLLECTION_PERIOD_SECS, setReadyToPublishData);
-    addRegularAction(FORECAST_UPDATE_INTERVAL_SECS, setReadyForWeatherUpdate);
+    me->addRegularAction(MQTT_DATA_COLLECTION_PERIOD_SECS, setReadyToPublishData);
+    me->addRegularAction(FORECAST_UPDATE_INTERVAL_SECS, setReadyForWeatherUpdate);
   #ifdef DHT_ON
-    addRegularAction(DHT_UPDATE_INTERVAL_SECS, setReadyForDHTUpdate);
+    me->addRegularAction(DHT_UPDATE_INTERVAL_SECS, setReadyForDHTUpdate);
   #endif
 }
 
@@ -354,18 +352,18 @@ void updateData(OLEDDisplay *display) {
     Serial.println("Data update...");
     drawProgress(display, 10, "Updating time...");
     timeClient.updateTime();
-    led2Pulse(250);
+    ledPulse(LED2,250);
     drawProgress(display, 30, "Updating conditions...");
     wunderground.updateConditions(WUNDERGRROUND_API_KEY, WUNDERGRROUND_LANGUAGE, WUNDERGROUND_COUNTRY, WUNDERGROUND_CITY);
-    led2Pulse(250);
+    ledPulse(LED2,250);
     drawProgress(display, 50, "Updating forecasts...");
     wunderground.updateForecast(WUNDERGRROUND_API_KEY, WUNDERGRROUND_LANGUAGE, WUNDERGROUND_COUNTRY, WUNDERGROUND_CITY);
-    led2Pulse(250);
+    ledPulse(LED2,250);
 
 #ifdef DHT_ON
     drawProgress(display, 70, "Updating DHT Sensor");
     dht.update(&readyForDHTUpdate);
-    led2Pulse(250);
+    ledPulse(LED2,250);
 #endif
 
 #ifdef THINGSPEAK_ON
@@ -376,7 +374,7 @@ void updateData(OLEDDisplay *display) {
     lastUpdate = timeClient.getFormattedTime();
     readyForWeatherUpdate = false;
     drawProgress(display, 100, "Done...");
-    led2Pulse(250);
+    ledPulse(LED2,250);
 }
 
 void drawDateTime(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y) {
@@ -589,15 +587,33 @@ void publishData() {
     Serial.println("Publishing data finished.");
 }
 
+void drawEndlessProgress(const char * msg, bool finished = false) {
+    static int counter = 0;
+    display.clear();
+    display.setFont(ArialMT_Plain_10);
+    display.setTextAlignment(TEXT_ALIGN_CENTER_BOTH);
+    display.drawString(DISPLAY_WIDTH / 2, 10, msg);
+    display.drawXbm(46, 30, 8, 8, finished || (counter % 3 == 0) ? activeSymbole : inactiveSymbole);
+    display.drawXbm(60, 30, 8, 8, finished || (counter % 3 == 1) ? activeSymbole : inactiveSymbole);
+    display.drawXbm(74, 30, 8, 8, finished || (counter % 3 == 2) ? activeSymbole : inactiveSymbole);
+    if (finished) display.drawString(DISPLAY_WIDTH / 2, 50, "Done");
+    display.display();
+    delayMs(finished ? 500 : 100);
+    counter++;
+}
+
 void onMqttEvent(Esp::MqttEvent event, const char* topic, const char* message) {
     switch(event) {
         case Esp::MqttEvent::CONNECT:
+            drawEndlessProgress("Connecting to MQTT", true);
             //subscribe to what we need
             break;
         case Esp::MqttEvent::DISCONNECT:
+            drawEndlessProgress("Connecting to MQTT");
             break;
         case Esp::MqttEvent::MESSAGE:
             // message came
+            Serial.printf("[MQTT Incoming] Topic: %s, Message: %s\r\n", topic, message);
             break;
     }
 }
@@ -605,13 +621,8 @@ void onMqttEvent(Esp::MqttEvent event, const char* topic, const char* message) {
 void setupNetworkHandlers() {
     me->registerWifiHandler([](Esp::WifiEvent e, int counter) {
         if (e == Esp::WifiEvent::CONNECTING) {
-            led2Pulse(250);
-            display.clear();
-            display.drawString(64, 10, "Connecting to WiFi");
-            display.drawXbm(46, 30, 8, 8, counter % 3 == 0 ? activeSymbole : inactiveSymbole);
-            display.drawXbm(60, 30, 8, 8, counter % 3 == 1 ? activeSymbole : inactiveSymbole);
-            display.drawXbm(74, 30, 8, 8, counter % 3 == 2 ? activeSymbole : inactiveSymbole);
-            display.display();
+            drawEndlessProgress("Connecting to WiFi");
+            ledPulse(LED2, 250);
         }
     });
     me->registerOtaHandlers([]() {
@@ -628,18 +639,20 @@ void setupNetworkHandlers() {
         display.display();
     },[](unsigned int progress, unsigned int total) {
         int p = progress / (total / 100);
-        led2Set((p & 1) ? LOW : HIGH);
         display.drawProgressBar(4, 32, 120, 8, p );
         display.display();
+        ledSet(LED2, (p & 1) ? LOW : HIGH);
     },NULL);
     me->addMqttEventHandler(onMqttEvent);
 }
 
 void setupHardware() {
-    setupLed();
-    setupLed2();
+    setupLed(LED1);
+    setupLed(LED2);
 
     initDisplay();
+    pinMode(2,OUTPUT);
+
 }
 
 void setup() {
@@ -654,12 +667,15 @@ void setup() {
     initUi();
     setupPowerPulsesCounting();
     setupRegularActions();
+
+    me->mqttSubscribe("control");
+    me->mqttSubscribe("show");
+
     Serial.println("Setup finished.");
 }
 
 void loop() {
-    ledSet(digitalRead(PULSE_PIN));
-    led2On();
+    ledSet(LED1, digitalRead(PULSE_PIN));
 
     me->loop();
 
