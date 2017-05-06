@@ -36,6 +36,7 @@ Esp::Esp() : wifiClient(), otaServer(8266), mqttClient(wifiClient) {
     String topic = String(MQTT_BASE_TOPIC_TEMPLATE);
     topic.replace("{id}", id);
     mqttBaseTopic = new char[topic.length() + 1];
+    mqttBaseTopic[topic.length()] = 0;
     strncpy(mqttBaseTopic, topic.c_str(), topic.length());
 
     delete buff;
@@ -93,7 +94,7 @@ void Esp::startNetworkStack() {
 }
 
 void Esp::wifiReconnect(bool firstTime = false) {
-    Serial.print("Connecting to WiFi..");
+    Serial.print(F("Connecting to WiFi.."));
     int counter = 0;
     while (WiFi.status() != WL_CONNECTED) {
         yield();
@@ -105,7 +106,7 @@ void Esp::wifiReconnect(bool firstTime = false) {
         delayMs(1000);
     }
     Serial.println();
-    Serial.print("Got IP Address: ");
+    Serial.print(F("Got IP Address: "));
     Serial.println(getIP());
 }
 
@@ -116,17 +117,17 @@ void Esp::setupWifi() {
 }
 
 void Esp::setupOta(){
-    Serial.print("Configuring OTA device...");
+    Serial.print(F("Configuring OTA device..."));
     otaServer.begin(); //Necesary to make Arduino Software autodetect OTA device
     Esp * _this = this;
     ArduinoOTA.onStart([_this]() {
-        Serial.println("OTA starting...");
+        Serial.println(F("OTA starting..."));
         if (_this->otafStart != NULL) _this->otafStart();
     });
 
     ArduinoOTA.onEnd([_this]() {
-        Serial.println("OTA update finished!");
-        Serial.println("Rebooting...");
+        Serial.println(F("OTA update finished!"));
+        Serial.println(F("Rebooting..."));
         if (_this->otafEnd != NULL) _this->otafEnd();
     });
 
@@ -138,25 +139,25 @@ void Esp::setupOta(){
 
     ArduinoOTA.onError([_this](ota_error_t error) {
         Serial.printf("Error[%u]: ", error);
-        if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
-        else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
-        else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
-        else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
-        else if (error == OTA_END_ERROR) Serial.println("End Failed");
+        if (error == OTA_AUTH_ERROR) Serial.println(F("Auth Failed"));
+        else if (error == OTA_BEGIN_ERROR) Serial.println(F("Begin Failed"));
+        else if (error == OTA_CONNECT_ERROR) Serial.println(F("Connect Failed"));
+        else if (error == OTA_RECEIVE_ERROR) Serial.println(F("Receive Failed"));
+        else if (error == OTA_END_ERROR) Serial.println(F("End Failed"));
         if (_this->otafError != NULL) _this->otafError(error);
     });
 
     ArduinoOTA.setPassword((const char *)OTA_PASSWORD);
     ArduinoOTA.setHostname(getHostname());
     ArduinoOTA.begin();
-    Serial.println(" Done.");
+    Serial.println(F(" Done."));
 }
 
 void Esp::setupMqtt() {
-    Serial.println("Configuring MQTT server...");
+    Serial.println(F("Configuring MQTT server..."));
     mqttClient.setServer(MQTT_SERVER, MQTT_PORT);
     Serial.printf("MQTT server IP: %s\r\n", MQTT_SERVER);
-    Serial.println("MQTT configured!");
+    Serial.println(F("MQTT configured!"));
     mqttReconnect((bool)true);
 }
 
@@ -164,7 +165,7 @@ void Esp::mqttReconnect(bool firstTime = false) {
 //  backToSystemPage();
 // Loop until we're reconnected
     while (!mqttClient.connected()) {
-        Serial.print("Attempting MQTT connection...");
+        Serial.print(F("Attempting MQTT connection..."));
         if (!firstTime) {
             mqttCallback(MqttEvent::DISCONNECT, NULL, NULL);
         }
@@ -173,7 +174,7 @@ void Esp::mqttReconnect(bool firstTime = false) {
 
         // boolean connect (clientID, willTopic, willQoS, willRetain, willMessage)
         if (mqttClient.connect(getHostname(), String(String(mqttBaseTopic) + (char *)TOPIC_SYS_ONLINE).c_str(), 0, 1, TOPIC_MSG_OFFLINE)) {
-            Serial.println("connected");
+            Serial.println(F("connected"));
             mqttCallback(MqttEvent::CONNECT, NULL, NULL);
             mqttAnnounce();
             //mqttSubscribe();
@@ -189,6 +190,7 @@ void Esp::mqttAnnounce() {
     mqttPublish(TOPIC_SYS_ONLINE, TOPIC_MSG_ONLINE, true);
     mqttPublish(TOPIC_SYS_ID, getHostname(), true);
     mqttPublish(TOPIC_SYS_IP, WiFi.localIP().toString().c_str(), true);
+    mqttHeartbeat();
 }
 
 void Esp::mqttHeartbeat() {
