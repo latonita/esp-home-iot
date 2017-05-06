@@ -9,30 +9,36 @@
 #include "esp.hpp"
 #include <Ticker.h>
 
-Esp* Esp::_me = NULL;
+Esp * Esp::_me = NULL;
 
-Esp* Esp::me() {
+Esp * Esp::me() {
     if (_me == NULL) {
         _me = new Esp();
     }
     return _me;
 };
 
+
+#define BUFFLEN 100
 Esp::Esp() : wifiClient(), otaServer(8266), mqttClient(wifiClient) {
-    char buff[100];
-    snprintf(buff, 100, "%s_%06X", (char*)HOSTNAME_BASE, ESP.getChipId());
+    char * buff = new char[BUFFLEN];
+
+    snprintf(buff, BUFFLEN, "%s-%06X", HOSTNAME_BASE, ESP.getChipId());
     char len = strlen(buff);
 
     id = new char[len + 1];
     strcpy(id, buff);
 
-    hostname = new char[len + strlen((char*)HOSTNAME_DOMAIN) + 1];
+    hostname = new char[len + strlen(HOSTNAME_DOMAIN) + 1];
     strcpy(hostname, id);
-    strcat(hostname, (char*)HOSTNAME_DOMAIN);
+    strcat(hostname, (char *)HOSTNAME_DOMAIN);
 
-    snprintf(buff, 100, MQTT_BASE_TOPIC_TEMPLATE, id);
-    mqttBaseTopic = new char(strlen(buff)+1);
-    strcpy(mqttBaseTopic, buff);
+    String topic = String(MQTT_BASE_TOPIC_TEMPLATE);
+    topic.replace("{id}", id);
+    mqttBaseTopic = new char[topic.length() + 1];
+    strncpy(mqttBaseTopic, topic.c_str(), topic.length());
+
+    delete buff;
 }
 
 Esp::~Esp() {}
@@ -52,9 +58,9 @@ IPAddress Esp::getIP() {
 // converts the dBm to a range between 0 and 100%
 int8_t Esp::getWifiQuality() {
     int32_t dbm = WiFi.RSSI();
-    if(dbm <= -100) {
+    if (dbm <= -100) {
         return 0;
-    } else if(dbm >= -50) {
+    } else if (dbm >= -50) {
         return 100;
     } else {
         return 2 * (dbm + 100);
@@ -67,17 +73,17 @@ void Esp::setup() {
 
 void Esp::printVersion() {
     Serial.println();
-    Serial.println("===============================================================");
-    Serial.println(": MQTT Pulse counter and MQTT display with OTA                :");
-    Serial.println(": (c) Anton Viktorov, latonita@yandex.ru, github.com/latonita :");
-    Serial.println("===============================================================");
+    Serial.println(F("==============================================================="));
+    Serial.println(F(": MQTT Pulse counter and MQTT display with OTA                :"));
+    Serial.println(F(": (c) Anton Viktorov, latonita@yandex.ru, github.com/latonita :"));
+    Serial.println(F("==============================================================="));
     Serial.printf("Compile date: %s\r\n", __DATE__ " " __TIME__);
     Serial.printf("Module id   : %s\r\n", id);
     Serial.printf("Hostname    : %s\r\n", hostname);
     Serial.printf("Wireless    : %s\r\n", WIFI_SSID);
     Serial.printf("MQTT server : %s\r\n", MQTT_SERVER);
     Serial.printf("MQTT topic  : %s\r\n", mqttBaseTopic);
-    Serial.println("===============================================================");
+    Serial.println(F("==============================================================="));
 }
 
 void Esp::startNetworkStack() {
@@ -112,7 +118,7 @@ void Esp::setupWifi() {
 void Esp::setupOta(){
     Serial.print("Configuring OTA device...");
     otaServer.begin(); //Necesary to make Arduino Software autodetect OTA device
-    Esp* _this = this;
+    Esp * _this = this;
     ArduinoOTA.onStart([_this]() {
         Serial.println("OTA starting...");
         if (_this->otafStart != NULL) _this->otafStart();
@@ -126,7 +132,7 @@ void Esp::setupOta(){
 
     ArduinoOTA.onProgress([_this](unsigned int progress, unsigned int total) {
         int p = progress / (total / 100);
-        Serial.printf("OTA in progress: %u%%\r\n", p );
+        Serial.printf("OTA in progress: %u%%\r\n", p);
         if (_this->otafProgress != NULL) _this->otafProgress(progress, total);
     });
 
@@ -166,7 +172,7 @@ void Esp::mqttReconnect(bool firstTime = false) {
         yield();
 
         // boolean connect (clientID, willTopic, willQoS, willRetain, willMessage)
-        if (mqttClient.connect(getHostname(), String(String(mqttBaseTopic) + (char*)TOPIC_SYS_ONLINE).c_str(), 0, 1, TOPIC_MSG_OFFLINE)) {
+        if (mqttClient.connect(getHostname(), String(String(mqttBaseTopic) + (char *)TOPIC_SYS_ONLINE).c_str(), 0, 1, TOPIC_MSG_OFFLINE)) {
             Serial.println("connected");
             mqttCallback(MqttEvent::CONNECT, NULL, NULL);
             mqttAnnounce();
@@ -191,14 +197,14 @@ void Esp::mqttHeartbeat() {
     mqttPublish(TOPIC_SYS_STATS_FREEHEAP, formatInteger(ESP.getFreeHeap()), false);
 }
 
-void Esp::stMqttCallback(char* _topic, byte* _payload, unsigned int _len) {
+void Esp::stMqttCallback(char * _topic, byte * _payload, unsigned int _len) {
     char msg[_len + 1];
-    strlcpy(msg, (char*)_payload, _len + 1);
-    me()->mqttCallback(MqttEvent::MESSAGE, (const char*)_topic,(const char*) msg);
+    strlcpy(msg, (char *)_payload, _len + 1);
+    me()->mqttCallback(MqttEvent::MESSAGE, (const char *)_topic,(const char *) msg);
 }
 
-void Esp::mqttCallback(MqttEvent evt, const char* topic, const char* msg) {
-    for (auto &fn : mqttEventHandlers) {
+void Esp::mqttCallback(MqttEvent evt, const char * topic, const char * msg) {
+    for (auto & fn : mqttEventHandlers) {
         fn(evt,topic,msg);
     }
 }
@@ -237,16 +243,16 @@ char * Esp::mqttSubscribe(const char * subTopic) {
 }
 
 void Esp::addRegularAction(unsigned int seconds, FRegularAction fn) {
-  if (fn != NULL){
-    Ticker *t = new Ticker();
-    t->attach_ms(seconds*1000, fn);
-  }
+    if (fn != NULL) {
+        Ticker * t = new Ticker();
+        t->attach_ms(seconds * 1000, fn);
+    }
 }
 
 void Esp::loop() {
     ArduinoOTA.handle();
     if (WiFi.status() != WL_CONNECTED) {
-      wifiReconnect();
+        wifiReconnect();
     }
     if (!mqttClient.connected()) {
         mqttReconnect();

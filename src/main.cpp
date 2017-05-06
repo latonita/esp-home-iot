@@ -110,8 +110,11 @@ ThingspeakClient thingspeak;
 /***************************
  * display objects
  **************************/
-SSD1306Wire display(I2C_DISPLAY_ADDRESS, SDA_PIN, SDC_PIN);
-OLEDDisplayUi ui( &display );
+SSD1306Wire * display;
+OLEDDisplayUi * ui;
+
+// SSD1306Wire display(I2C_DISPLAY_ADDRESS, SDA_PIN, SDC_PIN);
+// OLEDDisplayUi ui( &display );
 
 /***************************
  * Ticker and flags
@@ -132,26 +135,36 @@ void setReadyForDHTUpdate();
  * forward declarations
  **************************/
 
-void updateData(OLEDDisplay *display);
+void updateData(OLEDDisplay * display);
 
-void drawProgress(OLEDDisplay *display, int percentage, String label);
-void drawDateTime(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y);
-void drawInstantPower(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y);
-void drawCurrentWeather(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y);
-void drawForecast(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y);
+void drawProgress(OLEDDisplay * display, int percentage, String label);
+void drawDateTime(OLEDDisplay * display, OLEDDisplayUiState * state, int16_t x, int16_t y);
+#ifdef POWER_ON
+void drawInstantPower(OLEDDisplay * display, OLEDDisplayUiState * state, int16_t x, int16_t y);
+#endif
+#ifdef WEATHER_ON
+void drawCurrentWeather(OLEDDisplay * display, OLEDDisplayUiState * state, int16_t x, int16_t y);
+void drawForecast(OLEDDisplay * display, OLEDDisplayUiState * state, int16_t x, int16_t y);
+void drawForecastDetails(OLEDDisplay * display, int x, int y, int dayIndex);
+#endif
 #ifdef DHT_ON
-void drawIndoor(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y);
+void drawIndoor(OLEDDisplay * display, OLEDDisplayUiState * state, int16_t x, int16_t y);
 #endif
 #ifdef THINGSPEAK_ON
-void drawThingspeak(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y);
+void drawThingspeak(OLEDDisplay * display, OLEDDisplayUiState * state, int16_t x, int16_t y);
 #endif
-void drawForecastDetails(OLEDDisplay *display, int x, int y, int dayIndex);
-void drawHeaderOverlay(OLEDDisplay *display, OLEDDisplayUiState* state);
+void drawHeaderOverlay(OLEDDisplay * display, OLEDDisplayUiState * state);
 
 // Add frames
 // this array keeps function pointers to all frames
 // frames are the single views that slide from right to left
-FrameCallback frames[] = { drawDateTime, drawInstantPower, drawCurrentWeather, drawForecast
+FrameCallback frames[] = { drawDateTime
+#ifdef POWER_ON
+                           , drawInstantPower
+#endif
+#ifdef WEATHER_ON
+                           , drawCurrentWeather, drawForecast
+#endif
 #ifdef DHT_ON
                            , drawIndoor
 #endif
@@ -164,11 +177,12 @@ int numberOfFrames = (sizeof(frames) / sizeof(FrameCallback));
 OverlayCallback overlays[] = { drawHeaderOverlay };
 int numberOfOverlays = 1;
 
+unsigned int getSecondsOfDay() {
+    return timeClient.getCurrentEpochWithUtcOffset() % 86400L;
+}
+static char tempBuffer32[32];
 
-/***************************
- * Power counting
- **************************/
-unsigned int getSecondsOfDay();
+#ifdef POWER_ON
 
 #define POWER_ROLLUP_PERIOD_SEC 10
 #define ppwh 1.5625 //(1000/640)
@@ -243,13 +257,12 @@ typedef struct {
 PowerDisplay power;
 
 char formattedInstantPower[10];
-static char tempBuffer32[32];
 
 // The interrupt routine - runs each time a falling edge of a pulse is detected
 #define PULSE_DEBOUNCE 100000L
 void onPowerPulseISR() {
     if (digitalRead(PULSE_PIN) == LOW) {
-        if(micros() >= power.pulse.timeMicros + PULSE_DEBOUNCE ) {
+        if (micros() >= power.pulse.timeMicros + PULSE_DEBOUNCE) {
             power.pulse.count++;
             power.pulse.lastTimeMicros = power.pulse.timeMicros; //used to measure time between pulses.
             power.pulse.timeMicros = micros();
@@ -261,73 +274,73 @@ void setupPowerPulsesCounting() {
     pinMode(PULSE_PIN, INPUT);
     attachInterrupt(PULSE_PIN, onPowerPulseISR, FALLING);
 }
+#endif
 
 void setupRegularActions() {
     me->addRegularAction(MQTT_DATA_COLLECTION_PERIOD_SECS, setReadyToPublishData);
+  #ifdef WEATHER_ON
     me->addRegularAction(FORECAST_UPDATE_INTERVAL_SECS, setReadyForWeatherUpdate);
+  #endif
   #ifdef DHT_ON
     me->addRegularAction(DHT_UPDATE_INTERVAL_SECS, setReadyForDHTUpdate);
   #endif
 }
 
 void initDisplay() {
-    // initialize dispaly
-    display.init();
-    display.clear();
-    display.display();
-    //display.flipScreenVertically();
-    display.setFont(ArialMT_Plain_10);
-    display.setTextAlignment(TEXT_ALIGN_CENTER);
-    display.setContrast(180);
+    Serial.println(F("OLED hardware init..."));
+    display = new SSD1306Wire(I2C_DISPLAY_ADDRESS, SDA_PIN, SDC_PIN);
+    display->init();
+    display->clear();
+    display->display();
+    //display->flipScreenVertically();
+    display->setFont(ArialMT_Plain_10);
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    display->setContrast(180);
 }
 
 void initUi() {
-    Serial.println("UI Init...");
-    ui.setTargetFPS(30);
-    //ui.setActiveSymbol(activeSymbole);
-    //ui.setInactiveSymbol(inactiveSymbole);
-    ui.setActiveSymbol(emptySymbol);  // Hack until disableIndicator works
-    ui.setInactiveSymbol(emptySymbol); // - Set an empty symbol
-    ui.disableIndicator();
+    Serial.println(F("UI Init..."));
+    ui = new OLEDDisplayUi(display);
+    ui->setTargetFPS(30);
+    //ui->setActiveSymbol(activeSymbole);
+    //ui->setInactiveSymbol(inactiveSymbole);
+    ui->setActiveSymbol(emptySymbol);  // Hack until disableIndicator works
+    ui->setInactiveSymbol(emptySymbol); // - Set an empty symbol
+    ui->disableIndicator();
 
     // You can change this to TOP, LEFT, BOTTOM, RIGHT
-    ui.setIndicatorPosition(BOTTOM);
+    ui->setIndicatorPosition(BOTTOM);
     // Defines where the first frame is located in the bar.
-    ui.setIndicatorDirection(LEFT_RIGHT);
+    ui->setIndicatorDirection(LEFT_RIGHT);
     // You can change the transition that is used
     // SLIDE_LEFT, SLIDE_RIGHT, SLIDE_TOP, SLIDE_DOWN
-    ui.setFrameAnimation(SLIDE_LEFT);
-    ui.setFrames(frames, numberOfFrames);
-    ui.setOverlays(overlays, numberOfOverlays);
+    ui->setFrameAnimation(SLIDE_LEFT);
+    ui->setFrames(frames, numberOfFrames);
+    ui->setOverlays(overlays, numberOfOverlays);
     // Inital UI takes care of initalising the display too.
-    ui.init();
-    updateData(&display);
+    ui->init();
+    updateData(display);
 }
 
-
-char* formatInstantPowerW(double watts) {
+#ifdef POWER_ON
+char * formatInstantPowerW(double watts) {
     if (watts < 10) {
-        sprintf(formattedInstantPower, "-- W");
+        sprintf(formattedInstantPower, ("-- W"));
     } else if (watts < 1000) {
-        sprintf(formattedInstantPower, "%d W", watts);
+        sprintf(formattedInstantPower, ("%d W"), watts);
     } else if (watts < 1000000) {
-        sprintf(formattedInstantPower, "%s kW", formatDouble41(watts / 1000));
+        sprintf(formattedInstantPower, ("%s kW"), formatDouble41(watts / 1000));
     } else {
-        sprintf(formattedInstantPower, "9999 kW");
+        sprintf(formattedInstantPower, ("9999 kW"));
     }
     return formattedInstantPower;
 }
 
-unsigned int getSecondsOfDay() {
-    return timeClient.getCurrentEpochWithUtcOffset() % 86400L;
-}
-
 void powerCalculationLoop() {
-
     if (power.updatePower()) {
         formatInstantPowerW(power.instantWatts);
         // debug
-        Serial.printf("-------\r\n");
+        Serial.println();
         Serial.printf("insta watt: %s\r\n",formattedInstantPower);
         Serial.printf("pulses: %d\r\n", power.pulse.count);
         Serial.printf("pulses kept: %d\r\n", power.pulsesKept);
@@ -338,8 +351,9 @@ void powerCalculationLoop() {
         Serial.println(getUpTime());
     }
 }
+#endif
 
-void drawProgress(OLEDDisplay *display, int percentage, String label) {
+void drawProgress(OLEDDisplay * display, int percentage, String label) {
     display->clear();
     display->setTextAlignment(TEXT_ALIGN_CENTER);
     display->setFont(ArialMT_Plain_10);
@@ -348,17 +362,20 @@ void drawProgress(OLEDDisplay *display, int percentage, String label) {
     display->display();
 }
 
-void updateData(OLEDDisplay *display) {
+void updateData(OLEDDisplay * display) {
     Serial.println("Data update...");
     drawProgress(display, 10, "Updating time...");
     timeClient.updateTime();
     ledPulse(LED2,250);
+
+#ifdef WEATHER_ON
     drawProgress(display, 30, "Updating conditions...");
     wunderground.updateConditions(WUNDERGRROUND_API_KEY, WUNDERGRROUND_LANGUAGE, WUNDERGROUND_COUNTRY, WUNDERGROUND_CITY);
     ledPulse(LED2,250);
     drawProgress(display, 50, "Updating forecasts...");
     wunderground.updateForecast(WUNDERGRROUND_API_KEY, WUNDERGRROUND_LANGUAGE, WUNDERGROUND_COUNTRY, WUNDERGROUND_CITY);
     ledPulse(LED2,250);
+#endif
 
 #ifdef DHT_ON
     drawProgress(display, 70, "Updating DHT Sensor");
@@ -373,11 +390,12 @@ void updateData(OLEDDisplay *display) {
 
     lastUpdate = timeClient.getFormattedTime();
     readyForWeatherUpdate = false;
+
     drawProgress(display, 100, "Done...");
     ledPulse(LED2,250);
 }
 
-void drawDateTime(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y) {
+void drawDateTime(OLEDDisplay * display, OLEDDisplayUiState * state, int16_t x, int16_t y) {
     display->setTextAlignment(TEXT_ALIGN_CENTER);
     display->setFont(ArialMT_Plain_10);
     String date = wunderground.getDate();
@@ -390,7 +408,8 @@ void drawDateTime(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, in
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 }
 
-void drawInstantPower(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y) {
+#ifdef POWER_ON
+void drawInstantPower(OLEDDisplay * display, OLEDDisplayUiState * state, int16_t x, int16_t y) {
     display->setFont(ArialMT_Plain_10);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->drawString(42 + x, 5 + y, "Instant power");
@@ -406,8 +425,10 @@ void drawInstantPower(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x
 // int weatherIconWidth = display->getStringWidth(weatherIcon);
 // display->drawString(32 + x - weatherIconWidth / 2, 05 + y, weatherIcon);
 }
+#endif
 
-void drawCurrentWeather(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y) {
+#ifdef WEATHER_ON
+void drawCurrentWeather(OLEDDisplay * display, OLEDDisplayUiState * state, int16_t x, int16_t y) {
     display->setFont(ArialMT_Plain_10);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->drawString(60 + x, 5 + y, wunderground.getWeatherText());
@@ -423,35 +444,13 @@ void drawCurrentWeather(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t
     display->drawString(32 + x - weatherIconWidth / 2, 05 + y, weatherIcon);
 }
 
-void drawForecast(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y) {
+void drawForecast(OLEDDisplay * display, OLEDDisplayUiState * state, int16_t x, int16_t y) {
     drawForecastDetails(display, x, y, 0);
     drawForecastDetails(display, x + 44, y, 2);
     drawForecastDetails(display, x + 88, y, 4);
 }
 
-#ifdef DHT_ON
-void drawIndoor(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y) {
-    display->setTextAlignment(TEXT_ALIGN_CENTER);
-    display->setFont(ArialMT_Plain_10);
-    display->drawString(64 + x, 0, "Indoor Sensor");
-    display->setFont(ArialMT_Plain_16);
-    display->drawString(64 + x, 12, "Temp: " + String(dht.formattedTemperature()) + "°C");
-    display->drawString(64 + x, 30, "Humidity: " + String(dht.formattedHumidity()) + "%");
-}
-#endif
-
-#ifdef THINGSPEAK_ON
-void drawThingspeak(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y) {
-    display->setTextAlignment(TEXT_ALIGN_CENTER);
-    display->setFont(ArialMT_Plain_10);
-    display->drawString(64 + x, 0 + y, "Outdoor");
-    display->setFont(ArialMT_Plain_16);
-    display->drawString(64 + x, 10 + y, thingspeak.getFieldValue(0) + "°C");
-    display->drawString(64 + x, 30 + y, thingspeak.getFieldValue(1) + "%");
-}
-#endif
-
-void drawForecastDetails(OLEDDisplay *display, int x, int y, int dayIndex) {
+void drawForecastDetails(OLEDDisplay * display, int x, int y, int dayIndex) {
     display->setTextAlignment(TEXT_ALIGN_CENTER);
     display->setFont(ArialMT_Plain_10);
     String day = wunderground.getForecastTitle(dayIndex).substring(0, 3);
@@ -465,8 +464,31 @@ void drawForecastDetails(OLEDDisplay *display, int x, int y, int dayIndex) {
     display->drawString(x + 20, y + 34, wunderground.getForecastLowTemp(dayIndex) + "|" + wunderground.getForecastHighTemp(dayIndex));
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 }
+#endif
 
-void drawHeaderOverlay(OLEDDisplay *display, OLEDDisplayUiState* state) {
+#ifdef DHT_ON
+void drawIndoor(OLEDDisplay * display, OLEDDisplayUiState * state, int16_t x, int16_t y) {
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    display->setFont(ArialMT_Plain_10);
+    display->drawString(64 + x, 0, "Indoor Sensor");
+    display->setFont(ArialMT_Plain_16);
+    display->drawString(64 + x, 12, "Temp: " + String(dht.formattedTemperature()) + "°C");
+    display->drawString(64 + x, 30, "Humidity: " + String(dht.formattedHumidity()) + "%");
+}
+#endif
+
+#ifdef THINGSPEAK_ON
+void drawThingspeak(OLEDDisplay * display, OLEDDisplayUiState * state, int16_t x, int16_t y) {
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    display->setFont(ArialMT_Plain_10);
+    display->drawString(64 + x, 0 + y, (char *)F("Outdoor"));
+    display->setFont(ArialMT_Plain_16);
+    display->drawString(64 + x, 10 + y, thingspeak.getFieldValue(0) + "°C");
+    display->drawString(64 + x, 30 + y, thingspeak.getFieldValue(1) + "%");
+}
+#endif
+
+void drawHeaderOverlay(OLEDDisplay * display, OLEDDisplayUiState * state) {
     display->setColor(WHITE);
     display->setFont(ArialMT_Plain_10);
     String time = timeClient.getFormattedTime().substring(0, 5);
@@ -474,9 +496,11 @@ void drawHeaderOverlay(OLEDDisplay *display, OLEDDisplayUiState* state) {
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->drawString(0, 54, time);
 
+#ifdef POWER_ON
     display->setTextAlignment(TEXT_ALIGN_CENTER);
     display->drawString(64, 54, formattedInstantPower);
-
+#endif
+#ifdef WEATHER_ON
     display->setTextAlignment(TEXT_ALIGN_RIGHT);
     String temp = wunderground.getCurrentTemp() + "°C";
     display->drawString(128, 54, temp);
@@ -514,106 +538,76 @@ void drawHeaderOverlay(OLEDDisplay *display, OLEDDisplayUiState* state) {
 
    display->drawHorizontalLine(0, 52, 128);
  */
+#endif
 }
 
 
 void setReadyForWeatherUpdate() {
-    Serial.println("Ticker: readyForWeatherUpdate");
+//    Serial.println("Ticker: readyForWeatherUpdate");
     readyForWeatherUpdate = true;
 }
 
+#ifdef DHT_ON
 void setReadyForDHTUpdate() {
-    Serial.println("Ticker: readyForDHTUpdate");
+//    Serial.println("Ticker: readyForDHTUpdate");
     readyForDHTUpdate = true;
 }
+#endif
 
 void setReadyToPublishData() {
-    Serial.println("Ticker: readyToPublishData");
+//    Serial.println("Ticker: readyToPublishData");
     readyToPublishData = true;
 }
 
-
-//#define MQTT_BASE_TOPIC "world/p14/sensors/entrance/"
-
-
-
-
-
-//
-// about mqtt naming
-//
-// location/myhome/entrance/sensor/entrance/$online = online/offline
-// location/myhome/entrance/sensor/entrance/$id
-// location/myhome/entrance/sensor/entrance/$ip
-// location/myhome/entrance/sensor/entrance/$stats/uptime = seconds
-// location/myhome/entrance/sensor/entrance/$stats/signal = signal strength
-// location/myhome/entrance/sensor/entrance/$fw = firmware string
-
-// location/myhome/entrance/sensor/entrance/power/pulses_raw  = pulses;period
-// location/myhome/entrance/sensor/entrance/power/instant  = instant watts
-// location/myhome/entrance/sensor/entrance/power/usage = wh since last time
-// location/myhome/entrance/sensor/entrance/temperature  = temp
-// location/myhome/entrance/sensor/entrance/humidity  = temp
-// location/myhome/entrance/sensor/entrance/doorbell = dtm;photo
-
-// myhome/sensors/bathroom/water/pulses_raw = pulses_cold;pulses_hot;period
-
-// data to show:
-// myhome/presentation/power ///// ????
-// myhome/presentation/alert/
-
-//to read: http://tinkerman.cat/mqtt-topic-naming-convention/
-//https://harizanov.com/2014/09/mqtt-topic-tree-structure-improvements/
-//https://forum.mysensors.org/topic/4341/mqtt-messages-and-sensor-tree/4
-//https://hackaday.io/project/7342-mqopen/log/33302-mqtt-topic-structure-redesign
-
-//#define MQTT_BASE_TOPIC "world/p14/sensors/entrance/"
-
 void publishData() {
-    Serial.println("Publishing data ...");
+    Serial.println((char *)F("Publishing data ..."));
     readyToPublishData = false;
 
+#ifdef POWER_ON
     power.addPulses();
     sprintf(tempBuffer32,"%d;%d", power.pulsesKept, power.secondsKept);
     if (me->mqttPublish("power/pulses_raw", tempBuffer32, false)) {
         power.clearKept();
     } else {
-        Serial.println("MQTT publish fail");
+        Serial.println((char *)F("MQTT publish fail"));
     }
+#endif
 
+#ifdef DHT_ON
     me->mqttPublish("temperature", dht.formattedTemperature(), true);
     me->mqttPublish("humidity", dht.formattedHumidity(), true);
+#endif
 
-    Serial.println("Publishing data finished.");
+    Serial.println((char *)F("Publishing data finished."));
 }
 
 void drawEndlessProgress(const char * msg, bool finished = false) {
     static int counter = 0;
-    display.clear();
-    display.setFont(ArialMT_Plain_10);
-    display.setTextAlignment(TEXT_ALIGN_CENTER_BOTH);
-    display.drawString(DISPLAY_WIDTH / 2, 10, msg);
-    display.drawXbm(46, 30, 8, 8, finished || (counter % 3 == 0) ? activeSymbole : inactiveSymbole);
-    display.drawXbm(60, 30, 8, 8, finished || (counter % 3 == 1) ? activeSymbole : inactiveSymbole);
-    display.drawXbm(74, 30, 8, 8, finished || (counter % 3 == 2) ? activeSymbole : inactiveSymbole);
-    if (finished) display.drawString(DISPLAY_WIDTH / 2, 50, "Done");
-    display.display();
+    display->clear();
+    display->setFont(ArialMT_Plain_10);
+    display->setTextAlignment(TEXT_ALIGN_CENTER_BOTH);
+    display->drawString(DISPLAY_WIDTH / 2, 10, msg);
+    display->drawXbm(46, 30, 8, 8, finished || (counter % 3 == 0) ? activeSymbole : inactiveSymbole);
+    display->drawXbm(60, 30, 8, 8, finished || (counter % 3 == 1) ? activeSymbole : inactiveSymbole);
+    display->drawXbm(74, 30, 8, 8, finished || (counter % 3 == 2) ? activeSymbole : inactiveSymbole);
+    if (finished) display->drawString(DISPLAY_WIDTH / 2, 50, "Done");
+    display->display();
     delayMs(finished ? 500 : 100);
     counter++;
 }
 
-void onMqttEvent(Esp::MqttEvent event, const char* topic, const char* message) {
-    switch(event) {
+void onMqttEvent(Esp::MqttEvent event, const char * topic, const char * message) {
+    switch (event) {
         case Esp::MqttEvent::CONNECT:
-            drawEndlessProgress("Connecting to MQTT", true);
+            drawEndlessProgress((char *)F("Connecting to MQTT"), true);
             //subscribe to what we need
             break;
         case Esp::MqttEvent::DISCONNECT:
-            drawEndlessProgress("Connecting to MQTT");
+            drawEndlessProgress((char *)F("Connecting to MQTT"));
             break;
         case Esp::MqttEvent::MESSAGE:
             // message came
-            Serial.printf("[MQTT Incoming] Topic: %s, Message: %s\r\n", topic, message);
+            Serial.printf((char *)F("[MQTT Incoming] Topic: %s, Message: %s\r\n"), topic, message);
             break;
     }
 }
@@ -621,26 +615,26 @@ void onMqttEvent(Esp::MqttEvent event, const char* topic, const char* message) {
 void setupNetworkHandlers() {
     me->registerWifiHandler([](Esp::WifiEvent e, int counter) {
         if (e == Esp::WifiEvent::CONNECTING) {
-            drawEndlessProgress("Connecting to WiFi");
+            drawEndlessProgress((char *)F("Connecting to WiFi"));
             ledPulse(LED2, 250);
         }
     });
     me->registerOtaHandlers([]() {
-        display.clear();
-        display.setFont(ArialMT_Plain_10);
-        display.setTextAlignment(TEXT_ALIGN_CENTER_BOTH);
-        display.drawString(DISPLAY_WIDTH / 2, DISPLAY_HEIGHT / 2 - 10, "OTA Update");
-        display.display();
+        display->clear();
+        display->setFont(ArialMT_Plain_10);
+        display->setTextAlignment(TEXT_ALIGN_CENTER_BOTH);
+        display->drawString(DISPLAY_WIDTH / 2, DISPLAY_HEIGHT / 2 - 10, (char *)F("OTA Update"));
+        display->display();
     },[]() {
-        display.clear();
-        display.setFont(ArialMT_Plain_10);
-        display.setTextAlignment(TEXT_ALIGN_CENTER_BOTH);
-        display.drawString(DISPLAY_WIDTH / 2, DISPLAY_HEIGHT / 2, "Restart");
-        display.display();
+        display->clear();
+        display->setFont(ArialMT_Plain_10);
+        display->setTextAlignment(TEXT_ALIGN_CENTER_BOTH);
+        display->drawString(DISPLAY_WIDTH / 2, DISPLAY_HEIGHT / 2, (char *)F("Restart"));
+        display->display();
     },[](unsigned int progress, unsigned int total) {
         int p = progress / (total / 100);
-        display.drawProgressBar(4, 32, 120, 8, p );
-        display.display();
+        display->drawProgressBar(4, 32, 120, 8, p);
+        display->display();
         ledSet(LED2, (p & 1) ? LOW : HIGH);
     },NULL);
     me->addMqttEventHandler(onMqttEvent);
@@ -649,23 +643,22 @@ void setupNetworkHandlers() {
 void setupHardware() {
     setupLed(LED1);
     setupLed(LED2);
-
     initDisplay();
-    pinMode(2,OUTPUT);
-
 }
 
 void setup() {
-    Serial.println("Entering setup.");
     Serial.begin(SERIAL_BAUD_RATE);
     delayMs(50);
+    Serial.println("Entering setup.");
+    delayMs(50);
     me->setup();
-
     setupHardware();
     setupNetworkHandlers();
     me->startNetworkStack();
     initUi();
+#ifdef POWER_ON
     setupPowerPulsesCounting();
+#endif
     setupRegularActions();
 
     me->mqttSubscribe("control");
@@ -675,21 +668,24 @@ void setup() {
 }
 
 void loop() {
-    ledSet(LED1, digitalRead(PULSE_PIN));
-
     me->loop();
-
     yield();
-    powerCalculationLoop();
+
+#ifdef POWER_ON
+    ledSet(LED1, digitalRead(PULSE_PIN));
+    powerCalculationLoop
+#endif
 
     // Let's make sure frame transition is over
-    if (ui.getUiState()->frameState == FIXED) {
+    if (ui->getUiState()->frameState == FIXED) {
         if (readyToPublishData) {
             publishData();
         }
+    #ifdef WEATHER_ON
         if (readyForWeatherUpdate) {
-            updateData(&display);
+            updateData(display);
         }
+    #endif
     #ifdef DHT_ON
         if (readyForDHTUpdate) {
             dht.update(&readyForDHTUpdate);
@@ -697,7 +693,7 @@ void loop() {
     #endif
     }
 
-    int remainingTimeBudget = ui.update();
+    int remainingTimeBudget = ui->update();
     if (remainingTimeBudget > 0) {
         delayMs(remainingTimeBudget);
     }

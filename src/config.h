@@ -25,7 +25,7 @@
 #define WIFI_PWD "MegaPass!"
 #define OTA_PASSWORD "Secret!"
 
-#define MQTT_BASE_TOPIC_TEMPLATE "location/myhome/entrance/sensor/%s/"
+#define MQTT_BASE_TOPIC_TEMPLATE "location/myhome/entrance/sensor/{id}/"
 #define MQTT_SERVER "192.168.3.3"
 #define MQTT_PORT 1883
 
@@ -42,8 +42,10 @@
 /***************************
  * Features on/off
  **************************/
-#define DHT_ON
-#undef THINGSPEAK_ON
+//#define DHT_ON
+//#define THINGSPEAK_ON
+//#define WEATHER_ON
+//#define POWER_ON
 
 /***************************
  * Other
