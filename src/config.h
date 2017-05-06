@@ -42,10 +42,10 @@
 /***************************
  * Features on/off
  **************************/
-//#define DHT_ON
-//#define THINGSPEAK_ON
-//#define WEATHER_ON
-//#define POWER_ON
+#define DHT_ON
+#define THINGSPEAK_ON
+#define WEATHER_ON
+#define POWER_ON
 
 /***************************
  * Other

@@ -173,7 +173,6 @@ FrameCallback frames[] = { drawDateTime
 #endif
 };
 int numberOfFrames = (sizeof(frames) / sizeof(FrameCallback));
-
 OverlayCallback overlays[] = { drawHeaderOverlay };
 int numberOfOverlays = 1;
 
@@ -396,11 +395,14 @@ void updateData(OLEDDisplay * display) {
 }
 
 void drawDateTime(OLEDDisplay * display, OLEDDisplayUiState * state, int16_t x, int16_t y) {
-    display->setTextAlignment(TEXT_ALIGN_CENTER);
+  int textWidth;
+  display->setTextAlignment(TEXT_ALIGN_CENTER);
+#ifdef WEATHER_ON
     display->setFont(ArialMT_Plain_10);
     String date = wunderground.getDate();
-    int textWidth = display->getStringWidth(date);
+    textWidth = display->getStringWidth(date);
     display->drawString(64 + x, 5 + y, date);
+#endif
     display->setFont(ArialMT_Plain_24);
     String time = timeClient.getFormattedTime();
     textWidth = display->getStringWidth(time);
@@ -673,7 +675,7 @@ void loop() {
 
 #ifdef POWER_ON
     ledSet(LED1, digitalRead(PULSE_PIN));
-    powerCalculationLoop
+    powerCalculationLoop();
 #endif
 
     // Let's make sure frame transition is over

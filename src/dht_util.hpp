@@ -14,8 +14,8 @@ class dht_util {
 private:
     dht11 dht;
     char pin;
-    double humidity = 0.0;
-    double temperature = 0.0;
+    double humidity = 50.0;
+    double temperature = 22.0;
 
     const float alpha = 0.7;
     bool initialized = false;
