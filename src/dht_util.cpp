@@ -8,6 +8,7 @@
 
 #include "dht_util.hpp"
 #include "utils.h"
+#include <ArduinoJson.h>
 
 dht_util::dht_util(char pin) : pin(pin) {}
 dht_util::~dht_util() {}
@@ -18,7 +19,7 @@ void dht_util::update(bool * readyForDHTUpdate) {
         initialized = true;
         humidity = !initialized ? dht.humidity : alpha * humidity + (1 - alpha) * (double)dht.humidity;
         temperature = !initialized ? dht.temperature : alpha * temperature + (1 - alpha) * (double)dht.temperature;
-        Serial.printf("DHT smoothed: Temp: %s°C, Humi:%s%%\r\n", formattedTemperature(), formattedHumidity());
+        Serial.printf("DHT smoothed: Temp: %s C, Humi:%s%%\r\n", formattedTemperature(), formattedHumidity());
     } else {
         Serial.println("DHT reading failure.");
     }
@@ -30,4 +31,15 @@ char * dht_util::formattedHumidity() {
 
 char * dht_util::formattedTemperature() {
     return formatDouble41(temperature);
+}
+
+const char * dht_util::getDataJson() {
+    DynamicJsonBuffer json;
+    JsonObject & root = json.createObject();
+    root["temperature"] = String(temperature);
+    root["humidity"] = String(humidity);
+
+    static char dataBuffer[64];
+    root.printTo(dataBuffer);
+    return dataBuffer;
 }

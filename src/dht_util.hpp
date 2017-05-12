@@ -27,6 +27,9 @@ public:
     char * formattedTemperature();
     char * formattedHumidity();
     void update(bool * readyForDHTUpdate);
+
+    const char * getDataJson();
+
 protected:
 
 };

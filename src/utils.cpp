@@ -2,18 +2,54 @@
 #define _LATONITA_UTILS_C_
 
 #include "utils.h"
+#include <TimeClient.h>
 
-char * secondsToString(unsigned long t) {
+void delayMicros(uint32_t us){
+    uint32_t start = micros();
+    while (micros() - start < us) {}
+}
+
+void delayMs(uint32_t ms){
+    uint32_t start = millis();
+    while (millis() - start < ms) {
+        yield();
+    }
+}
+
+char * formatDouble40(double d) {
+    return dtostrf(d, 4, 0, utils_buff32);
+}
+char * formatDouble41(double d) {
+    return dtostrf(d, 4, 1, utils_buff32);
+}
+
+TimeProvider::TimeProvider(){};
+
+TimeProvider * TimeProvider::_me;
+TimeProvider * TimeProvider::me() {
+    if (_me == NULL) {
+        _me = new TimeProvider();
+    }
+}
+
+void TimeProvider::setProvider(TimeProvider * p) {
+    if (_me != NULL) {
+        delete _me;
+    }
+    _me = p;
+}
+
+const char * TimeProvider::secondsToString(unsigned long t) {
     static char str[12];
     long h = t / 3600;
     t = t % 3600;
     int m = t / 60;
     int s = t % 60;
-    sprintf(str, "%04ld:%02d:%02d", h, m, s);
+    snprintf(str, 12, "%04ld:%02d:%02d", h, m, s);
     return str;
 }
 
-char * getUpTime() {
+const char * TimeProvider::getUpTime() {
     static unsigned long last_millis = 0;
     static unsigned char overflow = 0;
     unsigned long now = millis();
@@ -24,20 +60,33 @@ char * getUpTime() {
     return secondsToString((now / 1000) + (MAX_UPTIME / 1000) * overflow);
 }
 
-void delayMicros(uint32_t us){
-    uint32_t start = micros();
-    while(micros() - start < us) {}
+unsigned long TimeProvider::getSecondsOfDay() {
+    // default dummy impl
+    return (millis() / 1000) % 86400L;
 }
 
-void delayMs(uint32_t ms){
-    uint32_t start = millis();
-    while(millis() - start < ms) {
-        yield();
-    }
+const char * TimeProvider::getTimeStringShort() {
+    static char str[12];
+    auto t = getSecondsOfDay();
+    long h = t / 3600;
+    t = t % 3600;
+    int m = t / 60;
+    snprintf(str, 12, "%02ld:%02d", h, m);
+    return str;
+}
+const char * TimeProvider::getTimeStringLong() {
+    static char str[12];
+    auto t = getSecondsOfDay();
+    long h = t / 3600;
+    t = t % 3600;
+    int m = t / 60;
+    int s = t % 60;
+    snprintf(str, 12, "%02ld:%02d:%02d", h, m, s);
+    return str;
 }
 
-char * formatDouble41(double d) {
-    return dtostrf(d, 4, 1, utils_buff32);
+void TimeProvider::updateTime() {
+    return;
 }
 
 #endif
