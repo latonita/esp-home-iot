@@ -48,15 +48,16 @@
  * Data collection periods
  **************************/
 #define MQTT_DATA_COLLECTION_PERIOD_SECS 5 * 60 // time to collect data before posting to mqtt
-
 #define FORECAST_UPDATE_INTERVAL_SECS 30 * 60 // Update weather forecast every 30 minutes
 #define DHT_UPDATE_INTERVAL_SECS 1 * 60 // read from DHT sensor
+
+#define BASE_HEARTBEAT MQTT_DATA_COLLECTION_PERIOD_SECS
 
 /***************************
  * Features on/off
  **************************/
 #define DHT_ON
-#define THINGSPEAK_ON
+//#define THINGSPEAK_ON
 #define WEATHER_ON
 #define POWER_ON
 

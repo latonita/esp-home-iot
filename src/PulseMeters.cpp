@@ -114,6 +114,7 @@ void PowerMeter::loop() {
     static ElapsedMillis elapsed;
     if (elapsed > PULSE_DATA_ROLLUP_PERIOD_MS) {
         updateData();
+        elapsed.rearm();
     }
 }
 
@@ -200,5 +201,6 @@ void WaterMeter::loop() {
     static ElapsedMillis elapsed;
     if (elapsed > PULSE_DATA_ROLLUP_PERIOD_MS) {
         updateData();
+        elapsed.rearm();
     }
 }

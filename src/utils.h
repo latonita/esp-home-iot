@@ -47,6 +47,9 @@ public:
     operator unsigned long() const {
         return millis() - ms;
     }
+    void rearm() {
+        ms = millis();
+    }
 };
 
 
