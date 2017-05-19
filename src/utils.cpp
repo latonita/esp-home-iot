@@ -16,10 +16,10 @@ void delayMs(uint32_t ms){
     }
 }
 
-char * formatDouble40(double d) {
+const char * formatDouble40(double d) {
     return dtostrf(d, 4, 0, utils_buff32);
 }
-char * formatDouble41(double d) {
+const char * formatDouble41(double d) {
     return dtostrf(d, 4, 1, utils_buff32);
 }
 

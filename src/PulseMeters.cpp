@@ -10,16 +10,16 @@
 #include "utils.h"
 #include <ArduinoJson.h>
 
-Pulses::Pulses(double ppu) : pulsesPerUnit(ppu){}
+Pulses::Pulses(double ppu) : pulsesPerUnit(ppu), averageFlow(5) {}
 Pulses::~Pulses(){}
 
 void Pulses::debouncedPulseISR() {
-    unsigned long now = micros();
-    if (now >= lastMicros + PULSE_DEBOUNCE) {
+    unsigned long now = millis();
+    if (now >= lastMillis + PULSE_DEBOUNCE) {
         ++count;
 
-        pulseWidth = now - lastMicros;
-        lastMicros = now;
+        pulseWidth = now - lastMillis;
+        lastMillis = now;
     }
 }
 
@@ -29,10 +29,9 @@ void Pulses::rollUpPulses() {
     pulsesLast = count;
     count = 0;
     sei();
+
     pulsesKept += pulsesLast;
     pulsesToday += pulsesLast;
-
-    //secondsKept += MQTT_DATA_COLLECTION_PERIOD_SECS;
 
     // add up today, and check y-day
     unsigned long now = TimeProvider::me()->getSecondsOfDay();
@@ -52,15 +51,28 @@ void Pulses::calcUnits() {
     unitsKept = pulsesKept / pulsesPerUnit;
     unitsConsumedToday = pulsesToday / pulsesPerUnit;
     unitsConsumedYesterday = pulsesYesterday / pulsesPerUnit;
-    if (pulseWidth > 0) {
-        instantFlow = (3600000000.0 / pulseWidth) * pulsesPerUnit;
-    } else {
-        instantFlow = 0;
-    }
 }
 
 void Pulses::setPPU(double ppu) {
     pulsesPerUnit = ppu;
+}
+
+double Pulses::calcFlow() {
+    unsigned long currentPulseWidth = millis() - lastMillis;
+
+    if (currentPulseWidth < pulseWidth) {
+        currentPulseWidth = pulseWidth;
+    }
+
+    if (currentPulseWidth > 0) {
+        instantFlow = 3600000.0 / (currentPulseWidth * pulsesPerUnit);
+    } else {
+        instantFlow = 0;
+    }
+    return instantFlow;
+}
+void Pulses::updateAverageFlow() {
+    averageFlow.add(calcFlow());
 }
 
 PowerMeter::PowerMeter() : pulse(POWER_PULSES_PER_WATT_HOUR) {}
@@ -77,19 +89,21 @@ PowerMeter * PowerMeter::me() {
 
 void PowerMeter::updateData() {
     pulse.rollUpPulses();
-    calcEnergyAndPower();
 }
 
-const char * PowerMeter::getDataJson() {
+const char * PowerMeter::getDataJson(unsigned int period_s) {
     DynamicJsonBuffer json;
     JsonObject & root = json.createObject();
+    secondsKept += period_s;
     root["pulses"] = pulse.pulsesKept;
-    root["energy"] = String(pulse.unitsKept);
-    root["power"] = String(instantWatts());
-    root["eToday"] = String(energyConsumedTodayKWH());
-    root["eYesterday"] = String(energyConsumedYesterdayKWH());
+    root["s"] = secondsKept;
+//    root["p"] = String(pulse.calcFlow());
+    root["p"] = String(averageWatts());
+    root["wh"] = String(pulse.unitsKept);
+    root["wh_day"] = String(energyConsumedTodayKWH());
+    root["wh_yday"] = String(energyConsumedYesterdayKWH());
 
-    static char dataBuffer[128];
+    static char dataBuffer[200];
     root.printTo(dataBuffer);
     return dataBuffer;
 }
@@ -100,20 +114,22 @@ void PowerMeter::clearKept() {
 };
 
 void PowerMeter::onPowerPulseISR() {
-    if (digitalRead(POWER_PULSE_PIN) == LOW) {
+    if (digitalRead(POWER_PULSE_PIN) == HIGH) {
         me()->pulse.debouncedPulseISR();
     }
 }
 
 void PowerMeter::setup() {
     pinMode(POWER_PULSE_PIN, INPUT);
-    attachInterrupt(POWER_PULSE_PIN, onPowerPulseISR, FALLING);
+    attachInterrupt(POWER_PULSE_PIN, onPowerPulseISR, RISING);
 }
 
 void PowerMeter::loop() {
     static ElapsedMillis elapsed;
     if (elapsed > PULSE_DATA_ROLLUP_PERIOD_MS) {
-        updateData();
+        pulse.rollUpPulses();
+        pulse.calcUnits();
+        pulse.updateAverageFlow();
         elapsed.rearm();
     }
 }
@@ -122,25 +138,22 @@ void PowerMeter::setPPU(double ppu) {
     pulse.setPPU(ppu);
 }
 
-void PowerMeter::calcEnergyAndPower() {
-    pulse.calcUnits();
+double PowerMeter::averageWatts() {
+    return pulse.averageFlow.avg();
 }
 
 double PowerMeter::instantWatts() {
-    if (pulse.lastMicros > 0) {
-        instantFlow = (3600000000.0 / (micros() - pulse.lastMicros)) * pulse.pulsesPerUnit;
-    }
-    return instantFlow;
+    return pulse.instantFlow;
 }
 
-const char * PowerMeter::formattedInstantPowerW() {
+const char * PowerMeter::formattedInstantPowerW(bool average = false) {
   #define FIP_BUF_LEN 10
     static char formattedInstantPower[FIP_BUF_LEN + 1];
-    double watts = instantWatts();
+    double watts = average ? averageWatts() : instantWatts();
     if (watts < 10) {
         snprintf(formattedInstantPower, FIP_BUF_LEN, ("-- W"));
     } else if (watts < 1000) {
-        snprintf(formattedInstantPower, FIP_BUF_LEN, ("%s W"), formatDouble41(watts));
+        snprintf(formattedInstantPower, FIP_BUF_LEN, ("%s W"), formatDouble40(watts));
     } else if (watts < 1000000) {
         snprintf(formattedInstantPower, FIP_BUF_LEN, ("%s kW"), formatDouble41(watts / 1000));
     } else {
@@ -149,7 +162,7 @@ const char * PowerMeter::formattedInstantPowerW() {
     return formattedInstantPower;
 }
 
-WaterMeter::WaterMeter() : cold(WATER_COLD_PULSES_PER_LITERS), hot(WATER_HOT_PULSES_PER_LITERS) {}
+WaterMeter::WaterMeter() : cold(WATER_COLD_PULSES_PER_LITER), hot(WATER_HOT_PULSES_PER_LITER) {}
 WaterMeter::~WaterMeter() {}
 
 WaterMeter * WaterMeter::_me;

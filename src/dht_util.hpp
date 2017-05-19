@@ -24,8 +24,8 @@ public:
     dht_util(char pin);
     ~dht_util();
 
-    char * formattedTemperature();
-    char * formattedHumidity();
+    const char * formattedTemperature();
+    const char * formattedHumidity();
     void update(bool * readyForDHTUpdate);
 
     const char * getDataJson();

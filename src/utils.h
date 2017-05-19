@@ -11,8 +11,8 @@
 
 static char utils_buff32[33];
 
-char * formatDouble40(double);
-char * formatDouble41(double);
+const char * formatDouble40(double);
+const char * formatDouble41(double);
 
 #define formatInteger(x) itoa(x, utils_buff32, 10)
 

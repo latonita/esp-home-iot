@@ -11,19 +11,19 @@
 
 #include <stdio.h>
 #include <Arduino.h>
+#include <RunningAverage.h>
 #include "config.h"
 
 #define PULSE_DATA_ROLLUP_PERIOD_MS 2000ul
-#define PULSE_DEBOUNCE 100000L // 100ms = 0.1s
+#define PULSE_DEBOUNCE 100L // 100ms = 0.1s
 
 struct Pulses {
 public:
     Pulses(double ppu);
     ~Pulses();
-    double pulsesPerUnit;
 
     volatile unsigned long count = 0;
-    volatile unsigned long lastMicros = 0;
+    volatile unsigned long lastMillis = 0;
     volatile unsigned long pulseWidth = 0;
     void debouncedPulseISR();
 
@@ -42,15 +42,18 @@ public:
     double instantFlow = 0;
 
     void calcUnits();
+    double calcFlow();
+    void updateAverageFlow();
+    RunningAverage averageFlow;
     void setPPU(double ppu);
+    double pulsesPerUnit;
 };
 
 class PowerMeter {
 private:
     static PowerMeter * _me;
-    Pulses pulse;
-    double instantFlow = 0;
 public:
+    Pulses pulse;
     double energyConsumedTodayKWH() {
         return pulse.unitsConsumedToday / 1000;
     }
@@ -59,6 +62,7 @@ public:
     }
 
     double instantWatts();
+    double averageWatts();
 
     unsigned int secondsKept = 0;
 
@@ -71,11 +75,8 @@ public:
     void updateData();
     void clearKept();
 
-    const char * getDataJson();
-
-    void calcEnergyAndPower();
-
-    const char * formattedInstantPowerW(); //todo remove
+    const char * formattedInstantPowerW(bool average); //todo remove
+    const char * getDataJson(unsigned int period_s);
 
 protected:
     PowerMeter();

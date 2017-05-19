@@ -2,11 +2,11 @@
  * Connection params
  **************************/
 #define HOSTNAME_BASE "espnode"   // used to produce id and hostname
-#define HOSTNAME_DOMAIN ".lan"    // "espnode-xxxx.lan"
+#define HOSTNAME_DOMAIN ".local"    // "espnode-xxxx.local"
 
-#define WIFI_SSID "LAWIRELESS"    // my wireless network. use yours..
-#define WIFI_PWD "MegaPass!"      // your super mega secret password for wifi. try this one. but not sure it will work ;)))
-#define OTA_PASSWORD "Secret!"    // your super mega secret password for OTA update
+#define WIFI_SSID "LAWIRELESS"    // my wireless network. use yours.. i'm using env variables to set real ssid and password
+#define WIFI_PWD "MegaPass!"      // your super mega secret password for wifi. i'm using env variables to set real ssid and password
+#define OTA_PASSWORD "Secret!"    // your super mega secret password for OTA update. i'm using env variables to set real ssid and password
 
 #define MQTT_SERVER "192.168.3.3" // MQTT server
 #define MQTT_PORT 1883
@@ -47,11 +47,11 @@
 /***************************
  * Data collection periods
  **************************/
-#define MQTT_DATA_COLLECTION_PERIOD_SECS 5 * 60 // time to collect data before posting to mqtt
+#define MQTT_DATA_COLLECTION_PERIOD_SECS 1 * 60 // time to collect data before posting to mqtt
 #define FORECAST_UPDATE_INTERVAL_SECS 30 * 60 // Update weather forecast every 30 minutes
 #define DHT_UPDATE_INTERVAL_SECS 1 * 60 // read from DHT sensor
 
-#define BASE_HEARTBEAT MQTT_DATA_COLLECTION_PERIOD_SECS
+#define BASE_HEARTBEAT_SECS MQTT_DATA_COLLECTION_PERIOD_SECS
 
 /***************************
  * Features on/off
@@ -68,5 +68,5 @@
 
 #define POWER_PULSES_PER_WATT_HOUR 0.64 //640 pulses = 1000 W*h
 
-#define WATER_COLD_PULSES_PER_LITERS 1
-#define WATER_HOT_PULSES_PER_LITERS 1
+#define WATER_COLD_PULSES_PER_LITER 1
+#define WATER_HOT_PULSES_PER_LITER 1

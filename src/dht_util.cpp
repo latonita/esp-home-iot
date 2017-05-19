@@ -25,12 +25,16 @@ void dht_util::update(bool * readyForDHTUpdate) {
     }
 }
 
-char * dht_util::formattedHumidity() {
-    return formatDouble41(humidity);
+const char * dht_util::formattedHumidity() {
+    static char humi[8];
+    strcpy(humi, formatDouble41(humidity));
+    return humi;
 }
 
-char * dht_util::formattedTemperature() {
-    return formatDouble41(temperature);
+const char * dht_util::formattedTemperature() {
+    static char temp[8];
+    strcpy(temp, formatDouble41(temperature));
+    return temp;
 }
 
 const char * dht_util::getDataJson() {

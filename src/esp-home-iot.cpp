@@ -1,15 +1,13 @@
 /*
-   2017. Anton Viktorov. Preface.
-   This work is based on Daniel Eichhorn's Weather Station Demo sketch.
-   I used to have quite similar application, but due to unknown reasons all glitchy
-   chineese esp8266 modules stopped accepting my sketch, rebooting even before
-   entering 'setup()' function. I have spent 2 days not able to solve an issue and
-   was ready to break my monitor with an empty wisky bottle. And I just tried this
-   sketch and it started working, oceans bless my monitor... So I started updating
-   this sketch trying to get same functionality (+extra) that I had before.
+   2017. Anton Viktorov,
+   latonita@yandex.ru,
+   http://github.com/latonita
+   This work is based on Daniel Eichhorn's Weather Station Demo sketch .
+   I used to have quite similar application, but lost its source code.
+   So I took Daniel's work as a base and reworked it a lot.
+   Daniel's page: http://blog.squix.ch
 
    My orignal work was based on MIT, and this one is not an exception.
-
  */
 /*
    The MIT License (MIT)
@@ -35,7 +33,7 @@
    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
    SOFTWARE.
 
-   See more at http://blog.squix.ch
+
    // Please read http://blog.squix.org/weatherstation-getting-code-adapting-it
    // for setup instructions
  */
@@ -60,6 +58,7 @@
 
 #include "utils.h"
 #include "ver.h"
+#include <ArduinoJson.h>
 #include "config.h"
 
 #ifdef DHT_ON
@@ -68,6 +67,7 @@
 
 #ifdef POWER_ON
   #include "PulseMeters.hpp"
+//  #include <Meter.h>
 #endif
 
 #ifdef THINGSPEAK_ON
@@ -88,6 +88,7 @@ dht_util dht(DHT_PIN);
  **************************/
  #ifdef POWER_ON
 PowerMeter * power = PowerMeter::me();
+//Meter meter1(1, 640);
  #endif
 
 /***************************
@@ -141,8 +142,8 @@ void setReadyForDHTUpdate();
 #endif
 
 #ifdef POWER_ON
-bool readyForInstantPowerUpdate = false;
-void setReadyForInstantPowerUpdate();
+// bool readyForInstantPowerUpdate = false;
+// void setReadyForInstantPowerUpdate();
 const char * formattedInstantPower = "";
 #endif
 
@@ -182,7 +183,7 @@ FrameCallback frames[] = { drawDateTime
                            , drawCurrentWeather, drawForecast
 #endif
 #ifdef DHT_ON
-                           , drawIndoor
+//                           , drawIndoor
 #endif
 #ifdef THINGSPEAK_ON
                            , drawThingspeak
@@ -198,7 +199,7 @@ static char tempBuffer32[32];
 void setupRegularActions() {
     me->addRegularAction(MQTT_DATA_COLLECTION_PERIOD_SECS, setReadyToPublishData);
   #ifdef POWER_ON
-    me->addRegularAction(2, setReadyForInstantPowerUpdate);
+//    me->addRegularAction(2, setReadyForInstantPowerUpdate);
   #endif
 
   #ifdef WEATHER_ON
@@ -464,12 +465,12 @@ void drawHeaderOverlay(OLEDDisplay * display, OLEDDisplayUiState * state) {
 
 //IoTNodeUiCpp mainUi;
 
-#ifdef POWER_ON
-void setReadyForInstantPowerUpdate() {
-//    Serial.println("Ticker: readyForInstantPowerUpdate");
-    readyForInstantPowerUpdate = true;
-}
-#endif
+// #ifdef POWER_ON
+// void setReadyForInstantPowerUpdate() {
+// //    Serial.println("Ticker: readyForInstantPowerUpdate");
+//     readyForInstantPowerUpdate = true;
+// }
+// #endif
 
 void setReadyForWeatherUpdate() {
     Serial.println("Ticker: readyForWeatherUpdate");
@@ -491,14 +492,38 @@ void setReadyToPublishData() {
 void publishData() {
     Serial.println("Publishing data ...");
     readyToPublishData = false;
+    ledSet(LED2, HIGH);
 
 #ifdef POWER_ON
+//     const int JSON_BUFFER_SIZE = JSON_OBJECT_SIZE(5);
+//     StaticJsonBuffer<JSON_BUFFER_SIZE> jsonBuffer;
+//
+// // create JSON
+//     JsonObject& root = jsonBuffer.createObject();
+//     root["pulses"] = meter1.count;
+//     root["power"] = meter1.get_power();
+//     root["kwhr"] = meter1.elapsed_kwhr;
+//     root["delay"] = meter1.pulse_length;
+//     root["avg_power"] = meter1.average_power.avg();
+//
+// // write JSON to buffer
+//     char buffer[256];
+//     root.printTo(buffer, sizeof(buffer));
+//     if (me->mqttPublish("power", buffer, false)) {
+// //        power->clearKept();
+//     } else {
+//         Serial.println("MQTT publish fail");
+//     }
+
+
+    //power->pulse.rollUpPulses();
     power->updateData();
-    if (me->mqttPublish("power", power->getDataJson(), false)) {
+    if (me->mqttPublish("power", power->getDataJson(MQTT_DATA_COLLECTION_PERIOD_SECS), false)) {
         power->clearKept();
     } else {
         Serial.println("MQTT publish fail");
     }
+
 #endif
 
 #ifdef DHT_ON
@@ -506,6 +531,7 @@ void publishData() {
 #endif
 
     Serial.println("Publishing data finished.");
+    ledSet(LED2, LOW);
 }
 
 void onMqttEvent(EspNodeBase::MqttEvent event, const char * topic, const char * message) {
@@ -558,6 +584,12 @@ void setupHardware() {
     initDisplay();
 }
 
+// #ifdef POWER_ON
+// void meter1_pulse() {
+//     meter1.pulse();
+// }
+// #endif
+
 void setup() {
     Serial.begin(SERIAL_BAUD_RATE);
     delayMs(50);
@@ -570,6 +602,9 @@ void setup() {
     initUi();
 #ifdef POWER_ON
     power->setup();
+    // pinMode(POWER_PULSE_PIN, INPUT);
+    // attachInterrupt(POWER_PULSE_PIN, meter1_pulse, RISING);
+
 #endif
     setupRegularActions();
 
@@ -579,6 +614,21 @@ void setup() {
     Serial.println("Setup finished.");
 }
 
+const char * formattedInstantPowerW(double watts) {
+  #define FIP_BUF_LEN 10
+    static char formattedInstantPower[FIP_BUF_LEN + 1];
+    if (watts < 10) {
+        snprintf(formattedInstantPower, FIP_BUF_LEN, ("-- W"));
+    } else if (watts < 1000) {
+        snprintf(formattedInstantPower, FIP_BUF_LEN, ("%s W"), formatDouble41(watts));
+    } else if (watts < 1000000) {
+        snprintf(formattedInstantPower, FIP_BUF_LEN, ("%s kW"), formatDouble41(watts / 1000));
+    } else {
+        snprintf(formattedInstantPower, FIP_BUF_LEN, ("9999.9 kW"));
+    }
+    return formattedInstantPower;
+}
+
 void loop() {
     me->loop();
     yield();
@@ -586,11 +636,13 @@ void loop() {
 #ifdef POWER_ON
     ledSet(LED1, digitalRead(POWER_PULSE_PIN));
     power->loop();
+    formattedInstantPower = power->formattedInstantPowerW(true);
 
-    if (readyForInstantPowerUpdate) {
-        readyForInstantPowerUpdate = false;
-        formattedInstantPower = power->formattedInstantPowerW();
-    }
+    // if (readyForInstantPowerUpdate) {
+    //     readyForInstantPowerUpdate = false;
+    //     meter1.update_average();
+    //     formattedInstantPower = formattedInstantPowerW(meter1.average_power.avg());
+    // }
 #endif
 
     // Let's make sure frame transition is over

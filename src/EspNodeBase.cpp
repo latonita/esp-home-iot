@@ -269,7 +269,7 @@ void EspNodeBase::loop() {
         mqttReconnect();
     }
     static ElapsedMillis timeElapsed;
-    if (timeElapsed > (unsigned long)(BASE_HEARTBEAT * 1000)) {
+    if (timeElapsed > (unsigned long)(BASE_HEARTBEAT_SECS * 1000)) {
         mqttHeartbeat();
         timeElapsed.rearm();
     }
