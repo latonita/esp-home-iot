@@ -21,7 +21,8 @@
 // display type:= {..}
 
 
-#define SERIAL_BAUD_RATE 74880
+#define SERIAL_BAUD_RATE 115200
+//esp8266 boots at 74880 baud
 
 /***************************
  * ALL PINS HERE
@@ -48,7 +49,7 @@
  * Data collection periods
  **************************/
 #define MQTT_DATA_COLLECTION_PERIOD_SECS 1 * 60 // time to collect data before posting to mqtt
-#define FORECAST_UPDATE_INTERVAL_SECS 30 * 60 // Update weather forecast every 30 minutes
+//#define FORECAST_UPDATE_INTERVAL_SECS 30 * 60 // Update weather forecast every 30 minutes
 #define DHT_UPDATE_INTERVAL_SECS 1 * 60 // read from DHT sensor
 
 #define BASE_HEARTBEAT_SECS MQTT_DATA_COLLECTION_PERIOD_SECS
@@ -57,7 +58,6 @@
  * Features on/off
  **************************/
 #define DHT_ON
-//#define THINGSPEAK_ON
 #define WEATHER_ON
 #define POWER_ON
 
@@ -66,7 +66,7 @@
  **************************/
 #define UTC_OFFSET 3
 
-#define POWER_PULSES_PER_WATT_HOUR 0.64 //640 pulses = 1000 W*h
+#define POWER_PULSES_PER_WATT_HOUR 1.60 //1600 pulses = 1000 W*h
 
 #define WATER_COLD_PULSES_PER_LITER 1
 #define WATER_HOT_PULSES_PER_LITER 1

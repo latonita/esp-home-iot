@@ -8,7 +8,7 @@
 
 #include "PulseMeters.hpp"
 #include "utils.h"
-#include <ArduinoJson.h>
+
 
 Pulses::Pulses(double ppu) : pulsesPerUnit(ppu), averageFlow(5) {}
 Pulses::~Pulses(){}
@@ -32,15 +32,6 @@ void Pulses::rollUpPulses() {
 
     pulsesKept += pulsesLast;
     pulsesToday += pulsesLast;
-
-    // add up today, and check y-day
-    unsigned long now = TimeProvider::me()->getSecondsOfDay();
-    if (lastRollUp > now) {
-        //new day
-        pulsesYesterday = pulsesToday;
-        pulsesToday = 0;
-    }
-    lastRollUp = now;
 }
 
 void Pulses::clearKept() {
@@ -49,8 +40,6 @@ void Pulses::clearKept() {
 
 void Pulses::calcUnits() {
     unitsKept = pulsesKept / pulsesPerUnit;
-    unitsConsumedToday = pulsesToday / pulsesPerUnit;
-    unitsConsumedYesterday = pulsesYesterday / pulsesPerUnit;
 }
 
 void Pulses::setPPU(double ppu) {
@@ -92,20 +81,9 @@ void PowerMeter::updateData() {
 }
 
 const char * PowerMeter::getDataJson(unsigned int period_s) {
-    DynamicJsonBuffer json;
-    JsonObject & root = json.createObject();
     secondsKept += period_s;
-    root["pulses"] = pulse.pulsesKept;
-    root["s"] = secondsKept;
-//    root["p"] = String(pulse.calcFlow());
-    root["p"] = String(averageWatts());
-    root["wh"] = String(pulse.unitsKept);
-    root["wh_day"] = String(energyConsumedTodayKWH());
-    root["wh_yday"] = String(energyConsumedYesterdayKWH());
-
-    static char dataBuffer[200];
-    root.printTo(dataBuffer);
-    return dataBuffer;
+    snprintf(utils_buff64, 64, "{\"pulses\":%d,\"seconds\":%d,\"power\":%.2f}", pulse.pulsesKept, secondsKept,averageWatts());
+    return utils_buff64;
 }
 
 void PowerMeter::clearKept() {

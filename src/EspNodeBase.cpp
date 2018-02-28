@@ -1,16 +1,11 @@
-//
-//  esp.cpp
-//  esp8266_WeatherStationDemo
-//
-//  Created by <author> on 04/05/2017.
-//
-//
-
 #include "EspNodeBase.hpp"
 #include <Ticker.h>
-#include "NtpTimeProvider.hpp"
+#include "HttpTimeProvider.hpp"
+
+#define TRIES 5
 
 EspNodeBase * EspNodeBase::_me = NULL;
+char * EspNodeBase::_mqttBuffer = NULL;
 
 EspNodeBase * EspNodeBase::me() {
     if (_me == NULL) {
@@ -18,7 +13,6 @@ EspNodeBase * EspNodeBase::me() {
     }
     return _me;
 };
-
 
 #define BUFFLEN 100
 EspNodeBase::EspNodeBase() : wifiClient(), otaServer(8266), mqttClient(wifiClient) {
@@ -41,7 +35,7 @@ EspNodeBase::EspNodeBase() : wifiClient(), otaServer(8266), mqttClient(wifiClien
     strncpy(mqttBaseTopic, topic.c_str(), topic.length());
 
     delete buff;
-    TimeProvider * np = new NtpTimeProvider();
+    TimeProvider * np = new HttpTimeProvider();
     TimeProvider::setProvider(np);
 }
 
@@ -98,8 +92,9 @@ void EspNodeBase::startNetworkStack() {
 
 void EspNodeBase::wifiReconnect(bool firstTime = false) {
     Serial.print(F("Connecting to WiFi.."));
-    int counter = 0;
-    while (WiFi.status() != WL_CONNECTED) {
+    unsigned int counter = 0;
+    while (WiFi.waitForConnectResult() != WL_CONNECTED && counter++ < TRIES) {
+    //while (WiFi.status() != WL_CONNECTED && counter++ < RETRIES) {
         yield();
         Serial.print(".");
         if (wifiEventHandler != NULL) {
@@ -108,12 +103,22 @@ void EspNodeBase::wifiReconnect(bool firstTime = false) {
         //todo: check if we cant connect for too long. options - reboot, buzz, setup own wifi?
         delayMs(1000);
     }
+    if (WiFi.waitForConnectResult() != WL_CONNECTED && counter == TRIES) {
+      Serial.println("Connection Failed! Rebooting...");
+      if (wifiEventHandler != NULL) {
+          wifiEventHandler(WifiEvent::FAILURE, 0);
+      }
+      delayMs(1000);
+      ESP.restart();
+    }
+
     Serial.println();
     Serial.print(F("Got IP Address: "));
     Serial.println(getIP());
 }
 
 void EspNodeBase::setupWifi() {
+    WiFi.persistent(false); // don't save config to flash to avoid wear of wifi config memory area
     WiFi.hostname(getHostname());
     WiFi.begin(WIFI_SSID, WIFI_PWD);
     wifiReconnect(true);
@@ -165,26 +170,25 @@ void EspNodeBase::setupMqtt() {
 }
 
 void EspNodeBase::mqttReconnect(bool firstTime = false) {
-//  backToSystemPage();
-// Loop until we're reconnected
-    while (!mqttClient.connected()) {
+    int count = 0;
+    while (!mqttClient.connected() && count++ < TRIES) {
         Serial.print(F("Attempting MQTT connection..."));
         if (!firstTime) {
-            mqttCallback(MqttEvent::DISCONNECT, NULL, NULL);
+            mqttCallback(MqttEvent::DISCONNECT, NULL, NULL, 0);
         }
-//    updateDisplay();
         yield();
 
-        // boolean connect (clientID, willTopic, willQoS, willRetain, willMessage)
         if (mqttClient.connect(getHostname(), String(String(mqttBaseTopic) + (char *)TOPIC_SYS_ONLINE).c_str(), 0, 1, TOPIC_MSG_OFFLINE)) {
             Serial.println(F("connected"));
-            mqttCallback(MqttEvent::CONNECT, NULL, NULL);
+            mqttCallback(MqttEvent::CONNECT, NULL, NULL, count);
             mqttAnnounce();
-            //mqttSubscribe();
+            mqttSubscribe();
         } else {
             Serial.printf("failed, rc=%d. Retrying in few seconds\r\n",mqttClient.state());
-//      updateDisplay();
             delayMs(1000);
+        }
+        if (WiFi.status() != WL_CONNECTED) { //got disconnected
+            return;
         }
     }
 }
@@ -203,22 +207,44 @@ void EspNodeBase::mqttHeartbeat() {
 }
 
 void EspNodeBase::stMqttCallback(char * _topic, byte * _payload, unsigned int _len) {
-    char msg[_len + 1];
-    strlcpy(msg, (char *)_payload, _len + 1);
-    me()->mqttCallback(MqttEvent::MESSAGE, (const char *)_topic,(const char *) msg);
+    Serial.printf("Received topic: %s, payload size: %u\r\n",_topic,_len);
+
+    char *pos = strstr((const char*)_topic, (const char*)me()->mqttBaseTopic);
+    if (pos != NULL) {
+      _topic += (strlen(me()->mqttBaseTopic));
+      Serial.printf("Received subtopic: %s\r\n",_topic);
+    }
+
+    if (_len + 1 > ESPNODEBASE_MQTT_BUFF) {
+      Serial.printf("stMqttCallback: buff %d < len %d\r\n", ESPNODEBASE_MQTT_BUFF, _len + 1);
+      return;
+    }
+
+    if (_mqttBuffer == NULL) {
+        _mqttBuffer = new char[ESPNODEBASE_MQTT_BUFF];
+    }
+
+    if (_mqttBuffer != NULL) {
+        strncpy(_mqttBuffer, (const char*)_payload, _len);
+        _mqttBuffer[_len] = 0;
+        Serial.printf("Received message: %s\r\n", _mqttBuffer);
+        me()->mqttCallback(MqttEvent::MESSAGE, (const char *)_topic, (const char *) _mqttBuffer, _len);
+    } else {
+        Serial.printf("stMqttCallback: Cant allocate new buffer of %u bytes\r\n", _len);
+    }
 }
 
-void EspNodeBase::mqttCallback(MqttEvent evt, const char * topic, const char * msg) {
+void EspNodeBase::mqttCallback(MqttEvent evt, const char * topic, const char * msg, unsigned int len) {
     for (auto & fn : mqttEventHandlers) {
-        fn(evt,topic,msg);
+        fn(evt,topic,msg,len);
     }
 }
 
 void EspNodeBase::mqttSubscribe() {//?
     mqttClient.setCallback(EspNodeBase::stMqttCallback);
-    mqttClient.subscribe("topicname");
+//    mqttClient.subscribe("topicname");
+//resubscribe.?
 }
-
 
 void EspNodeBase::registerWifiHandler(FWifiEventHandler _handler) {
     wifiEventHandler = _handler;
@@ -246,6 +272,7 @@ int EspNodeBase::mqttPublish(const char * subTopic, const byte * payload, int le
 }
 
 bool EspNodeBase::mqttSubscribe(const char * subTopic) {
+    Serial.printf("Subscribed to %s%s\r\n",mqttBaseTopic,subTopic);
     return mqttClient.subscribe((String(mqttBaseTopic) + subTopic).c_str());
 }
 
@@ -258,6 +285,10 @@ void EspNodeBase::addRegularAction(unsigned int seconds, FRegularAction fn) {
 
 TimeProvider * EspNodeBase::getTimeProvider() {
     return TimeProvider::me();
+}
+
+const bool EspNodeBase::isConnected() {
+  return (WiFi.status() == WL_CONNECTED && mqttClient.connected());
 }
 
 void EspNodeBase::loop() {

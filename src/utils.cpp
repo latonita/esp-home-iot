@@ -2,7 +2,6 @@
 #define _LATONITA_UTILS_C_
 
 #include "utils.h"
-#include <TimeClient.h>
 
 void delayMicros(uint32_t us){
     uint32_t start = micros();
@@ -83,6 +82,10 @@ const char * TimeProvider::getTimeStringLong() {
     int s = t % 60;
     snprintf(str, 12, "%02ld:%02d:%02d", h, m, s);
     return str;
+}
+
+const char * TimeProvider::getDateString() {
+  return "-";
 }
 
 void TimeProvider::updateTime() {

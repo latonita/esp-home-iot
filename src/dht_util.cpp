@@ -8,7 +8,6 @@
 
 #include "dht_util.hpp"
 #include "utils.h"
-#include <ArduinoJson.h>
 
 dht_util::dht_util(char pin) : pin(pin) {}
 dht_util::~dht_util() {}
@@ -38,12 +37,6 @@ const char * dht_util::formattedTemperature() {
 }
 
 const char * dht_util::getDataJson() {
-    DynamicJsonBuffer json;
-    JsonObject & root = json.createObject();
-    root["temperature"] = String(temperature);
-    root["humidity"] = String(humidity);
-
-    static char dataBuffer[64];
-    root.printTo(dataBuffer);
-    return dataBuffer;
+    snprintf(utils_buff64, 64, "{\"temperature\":%.2f,\"humidity\":%.2f}", temperature, humidity);
+    return utils_buff64;
 }

@@ -10,11 +10,15 @@
 #define SECONDS_IN_A_DAY 86400L
 
 static char utils_buff32[33];
+static char utils_buff64[65];
 
 const char * formatDouble40(double);
 const char * formatDouble41(double);
 
 #define formatInteger(x) itoa(x, utils_buff32, 10)
+
+#define COALESCE(x,y) (x != NULL ? x : y)
+#define COALESCE_D(x) (x != NULL ? x : "-")
 
 void delayMicros(uint32_t us);
 void delayMs(uint32_t ms);
@@ -33,6 +37,7 @@ public:
     virtual const char * getUpTime();
     virtual const char * getTimeStringShort();
     virtual const char * getTimeStringLong();
+    virtual const char * getDateString();
     virtual unsigned long getSecondsOfDay();
     virtual void updateTime();
 };

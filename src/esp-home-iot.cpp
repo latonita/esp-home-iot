@@ -41,11 +41,9 @@
 
 #include <Arduino.h>
 
-#include <JsonListener.h>
 #include <SSD1306Wire.h>
 #include <OLEDDisplayUi.h>
 #include <Wire.h>
-#include <WundergroundClient.h>
 
 #include <PubSubClient.h>
 #include <ESP8266mDNS.h>  //For OTA
@@ -58,7 +56,6 @@
 
 #include "utils.h"
 #include "ver.h"
-#include <ArduinoJson.h>
 #include "config.h"
 
 #ifdef DHT_ON
@@ -67,11 +64,6 @@
 
 #ifdef POWER_ON
   #include "PulseMeters.hpp"
-//  #include <Meter.h>
-#endif
-
-#ifdef THINGSPEAK_ON
-  #include "ThingspeakClient.h"
 #endif
 
 EspNodeBase * me = EspNodeBase::me();
@@ -86,26 +78,9 @@ dht_util dht(DHT_PIN);
 /***************************
  * POWER PULSES
  **************************/
- #ifdef POWER_ON
+#ifdef POWER_ON
 PowerMeter * power = PowerMeter::me();
-//Meter meter1(1, 640);
- #endif
-
-/***************************
- * TimeClient
- **************************/
-//TimeClient timeClient(UTC_OFFSET);
-String lastUpdate = "--";
-
-/***************************
- * Wunderground Settings
- **************************/
-const boolean IS_METRIC = true;
-const String WUNDERGRROUND_API_KEY = "f886e212d6bc0877";
-const String WUNDERGRROUND_LANGUAGE = "EN";
-const String WUNDERGROUND_COUNTRY = "RU";
-const String WUNDERGROUND_CITY = "Saint_Petersburg";
-WundergroundClient wunderground(IS_METRIC); // Set to false, if you prefere imperial/inches, Fahrenheit
+#endif
 
 /***************************
  * ThingSpeak Settings
@@ -123,9 +98,6 @@ ThingspeakClient thingspeak;
 SSD1306Wire * display;
 OLEDDisplayUi * ui;
 
-// SSD1306Wire display(I2C_DISPLAY_ADDRESS, SDA_PIN, SDC_PIN);
-// OLEDDisplayUi ui( &display );
-
 /***************************
  * Ticker and flags
  **************************/
@@ -133,31 +105,55 @@ OLEDDisplayUi * ui;
 bool readyToPublishData = false;
 void setReadyToPublishData();
 
+#ifdef WEATHER_ON
 bool readyForWeatherUpdate = false;
-void setReadyForWeatherUpdate();
+#endif
 
 #ifdef DHT_ON
 bool readyForDHTUpdate = false;
 void setReadyForDHTUpdate();
 #endif
 
+#define BUF_MAX 255
+
 #ifdef POWER_ON
-// bool readyForInstantPowerUpdate = false;
-// void setReadyForInstantPowerUpdate();
+#define POWER_P_T1 0
+#define POWER_P_T2 1
+#define POWER_P_YESTERDAY 2
+#define POWER_P_TODAY 3
+#define POWER_PARAMS 4
 const char * formattedInstantPower = "";
+char * bufPowerStats = new char[BUF_MAX]; //NULL;
+char * powerStats[POWER_PARAMS] = { NULL, NULL, NULL, NULL };
 #endif
+
+#define WEATHER_DAYS 4
+#define WEATHER_P_DAY 0
+#define WEATHER_P_TEMP 1
+#define WEATHER_P_ICON 2
+#define WEATHER_PARAMS 3
+char * bufWeather = new char[BUF_MAX]; //NULL;
+char * weatherItems[WEATHER_DAYS * WEATHER_PARAMS] = {
+    NULL, NULL, NULL,
+    NULL, NULL, NULL,
+    NULL, NULL, NULL,
+    NULL, NULL, NULL}; // 4 days x 4 params
+char * bufWeatherText = new char[BUF_MAX]; //NULL;
+char * weatherText[WEATHER_DAYS] = { NULL, NULL, NULL, NULL };
+
 
 /***************************
  * forward declarations
  **************************/
 
-void updateData(OLEDDisplay * display);
+void updateData();
 
 void drawProgress(OLEDDisplay * display, int percentage, String label);
 void drawDateTime(OLEDDisplay * display, OLEDDisplayUiState * state, int16_t x, int16_t y);
 #ifdef POWER_ON
 void drawInstantPower(OLEDDisplay * display, OLEDDisplayUiState * state, int16_t x, int16_t y);
 void drawEnergyConsumption(OLEDDisplay * display, OLEDDisplayUiState * state, int16_t x, int16_t y);
+void drawEnergyReadings(OLEDDisplay * display, OLEDDisplayUiState * state, int16_t x, int16_t y);
 #endif
 #ifdef WEATHER_ON
 void drawCurrentWeather(OLEDDisplay * display, OLEDDisplayUiState * state, int16_t x, int16_t y);
@@ -177,7 +173,7 @@ void drawHeaderOverlay(OLEDDisplay * display, OLEDDisplayUiState * state);
 // frames are the single views that slide from right to left
 FrameCallback frames[] = { drawDateTime
 #ifdef POWER_ON
-                           , drawInstantPower, drawEnergyConsumption
+                           , drawInstantPower, drawEnergyConsumption, drawEnergyReadings
 #endif
 #ifdef WEATHER_ON
                            , drawCurrentWeather, drawForecast
@@ -198,13 +194,7 @@ static char tempBuffer32[32];
 
 void setupRegularActions() {
     me->addRegularAction(MQTT_DATA_COLLECTION_PERIOD_SECS, setReadyToPublishData);
-  #ifdef POWER_ON
-//    me->addRegularAction(2, setReadyForInstantPowerUpdate);
-  #endif
 
-  #ifdef WEATHER_ON
-    me->addRegularAction(FORECAST_UPDATE_INTERVAL_SECS, setReadyForWeatherUpdate);
-  #endif
   #ifdef DHT_ON
     me->addRegularAction(DHT_UPDATE_INTERVAL_SECS, setReadyForDHTUpdate);
   #endif
@@ -216,6 +206,7 @@ void initDisplay() {
     display->init();
     display->clear();
     display->display();
+    //display->invertDisplay();
     //display->flipScreenVertically();
     display->setFont(ArialMT_Plain_10);
     display->setTextAlignment(TEXT_ALIGN_CENTER);
@@ -243,7 +234,8 @@ void initUi() {
     ui->setOverlays(overlays, numberOfOverlays);
     // Inital UI takes care of initalising the display too.
     ui->init();
-    updateData(display);
+
+    updateData();
 }
 
 void drawEndlessProgress(const char * msg, bool finished = false) {
@@ -271,20 +263,11 @@ void drawProgress(OLEDDisplay * display, int percentage, String label) {
     display->display();
 }
 
-void updateData(OLEDDisplay * display) {
+void updateData() {
     Serial.println("Data update...");
     drawProgress(display, 10, "Updating time...");
     me->getTimeProvider()->updateTime();
     ledPulse(LED2,250);
-
-#ifdef WEATHER_ON
-    drawProgress(display, 30, "Updating conditions...");
-    wunderground.updateConditions(WUNDERGRROUND_API_KEY, WUNDERGRROUND_LANGUAGE, WUNDERGROUND_COUNTRY, WUNDERGROUND_CITY);
-    ledPulse(LED2,250);
-    drawProgress(display, 50, "Updating forecasts...");
-    wunderground.updateForecast(WUNDERGRROUND_API_KEY, WUNDERGRROUND_LANGUAGE, WUNDERGROUND_COUNTRY, WUNDERGROUND_CITY);
-    ledPulse(LED2,250);
-#endif
 
 #ifdef DHT_ON
     drawProgress(display, 70, "Updating DHT Sensor");
@@ -297,9 +280,6 @@ void updateData(OLEDDisplay * display) {
     thingspeak.getLastChannelItem(THINGSPEAK_CHANNEL_ID, THINGSPEAK_API_READ_KEY);
 #endif
 
-    lastUpdate = me->getTimeProvider()->getTimeStringLong();
-    readyForWeatherUpdate = false;
-
     drawProgress(display, 100, "Done...");
     ledPulse(LED2,250);
 }
@@ -309,7 +289,7 @@ void drawDateTime(OLEDDisplay * display, OLEDDisplayUiState * state, int16_t x, 
     display->setTextAlignment(TEXT_ALIGN_CENTER);
 #ifdef WEATHER_ON
     display->setFont(ArialMT_Plain_10);
-    String date = wunderground.getDate();
+    String date = me->getTimeProvider()->getDateString();
     textWidth = display->getStringWidth(date);
     display->drawString(64 + x, 5 + y, date);
 #endif
@@ -343,11 +323,24 @@ void drawEnergyConsumption(OLEDDisplay * display, OLEDDisplayUiState * state, in
     display->drawString(64 + x, 0, "Energy Consumption");
     display->setFont(ArialMT_Plain_16);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
-    display->drawString(0 + x, 12, "Today: ");
-    display->drawString(0 + x, 30, "Y-day: ");
+    display->drawString(0 + x, 12, "Y-day: ");
+    display->drawString(0 + x, 30, "Today: ");
     display->setTextAlignment(TEXT_ALIGN_RIGHT);
-    display->drawString(128 + x, 12, String(power->energyConsumedTodayKWH()) + " kWh");
-    display->drawString(128 + x, 30, String(power->energyConsumedYesterdayKWH()) + " kWh");
+    display->drawString(128 + x, 12, String(COALESCE_D(powerStats[POWER_P_YESTERDAY])) + " kWh");
+    display->drawString(128 + x, 30, String(COALESCE_D(powerStats[POWER_P_TODAY])) + " kWh");
+}
+
+void drawEnergyReadings(OLEDDisplay * display, OLEDDisplayUiState * state, int16_t x, int16_t y) {
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    display->setFont(ArialMT_Plain_10);
+    display->drawString(64 + x, 0, "Meter Readings");
+    display->setFont(ArialMT_Plain_16);
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->drawString(0 + x, 12, "T1 : ");
+    display->drawString(0 + x, 30, "T2 : ");
+    display->setTextAlignment(TEXT_ALIGN_RIGHT);
+    display->drawString(128 + x, 12, String(COALESCE_D(powerStats[POWER_P_T1])) + " kWh");
+    display->drawString(128 + x, 30, String(COALESCE_D(powerStats[POWER_P_T2])) + " kWh");
 }
 #endif
 
@@ -355,37 +348,39 @@ void drawEnergyConsumption(OLEDDisplay * display, OLEDDisplayUiState * state, in
 void drawCurrentWeather(OLEDDisplay * display, OLEDDisplayUiState * state, int16_t x, int16_t y) {
     display->setFont(ArialMT_Plain_10);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
-    display->drawString(60 + x, 5 + y, wunderground.getWeatherText());
+    display->drawString(60 + x, 5 + y, String(COALESCE_D(weatherText[0])));
 
     display->setFont(ArialMT_Plain_24);
-    String temp = wunderground.getCurrentTemp() + "°C";
+    String temp = String(COALESCE_D(weatherItems[WEATHER_P_TEMP])) + "°C";
     display->drawString(60 + x, 15 + y, temp);
     int tempWidth = display->getStringWidth(temp);
 
     display->setFont(Meteocons_Plain_42);
-    String weatherIcon = wunderground.getTodayIcon();
+    String weatherIcon = String(COALESCE(weatherItems[WEATHER_P_ICON], ")"));//wunderground.getTodayIcon();
     int weatherIconWidth = display->getStringWidth(weatherIcon);
     display->drawString(32 + x - weatherIconWidth / 2, 05 + y, weatherIcon);
 }
 
 void drawForecast(OLEDDisplay * display, OLEDDisplayUiState * state, int16_t x, int16_t y) {
-    drawForecastDetails(display, x, y, 0);
+    drawForecastDetails(display, x, y, 1);
     drawForecastDetails(display, x + 44, y, 2);
-    drawForecastDetails(display, x + 88, y, 4);
+    drawForecastDetails(display, x + 88, y, 3);
 }
 
 void drawForecastDetails(OLEDDisplay * display, int x, int y, int dayIndex) {
     display->setTextAlignment(TEXT_ALIGN_CENTER);
     display->setFont(ArialMT_Plain_10);
-    String day = wunderground.getForecastTitle(dayIndex).substring(0, 3);
+    //String day = wunderground.getForecastTitle(dayIndex).substring(0, 3);
+    String day = String(COALESCE_D(weatherItems[dayIndex*WEATHER_PARAMS + WEATHER_P_DAY]));
+
     day.toUpperCase();
     display->drawString(x + 20, y, day);
 
     display->setFont(Meteocons_Plain_21);
-    display->drawString(x + 20, y + 12, wunderground.getForecastIcon(dayIndex));
+    display->drawString(x + 20, y + 12, COALESCE(weatherItems[dayIndex*WEATHER_PARAMS + WEATHER_P_ICON],")"));//wunderground.getForecastIcon(dayIndex));
 
     display->setFont(ArialMT_Plain_10);
-    display->drawString(x + 20, y + 34, wunderground.getForecastLowTemp(dayIndex) + "|" + wunderground.getForecastHighTemp(dayIndex));
+    display->drawString(x + 20, y + 34, COALESCE_D(weatherItems[dayIndex*WEATHER_PARAMS + WEATHER_P_TEMP]));//wunderground.getForecastLowTemp(dayIndex) + "|" + wunderground.getForecastHighTemp(dayIndex));
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 }
 #endif
@@ -401,17 +396,6 @@ void drawIndoor(OLEDDisplay * display, OLEDDisplayUiState * state, int16_t x, in
 }
 #endif
 
-#ifdef THINGSPEAK_ON
-void drawThingspeak(OLEDDisplay * display, OLEDDisplayUiState * state, int16_t x, int16_t y) {
-    display->setTextAlignment(TEXT_ALIGN_CENTER);
-    display->setFont(ArialMT_Plain_10);
-    display->drawString(64 + x, 0 + y, (char *)F("Outdoor"));
-    display->setFont(ArialMT_Plain_16);
-    display->drawString(64 + x, 10 + y, thingspeak.getFieldValue(0) + "°C");
-    display->drawString(64 + x, 30 + y, thingspeak.getFieldValue(1) + "%");
-}
-#endif
-
 void drawHeaderOverlay(OLEDDisplay * display, OLEDDisplayUiState * state) {
     display->setColor(WHITE);
     display->setFont(ArialMT_Plain_10);
@@ -422,59 +406,13 @@ void drawHeaderOverlay(OLEDDisplay * display, OLEDDisplayUiState * state) {
     display->setTextAlignment(TEXT_ALIGN_CENTER);
     display->drawString(64, 54, formattedInstantPower);
 #endif
+
 #ifdef WEATHER_ON
     display->setTextAlignment(TEXT_ALIGN_RIGHT);
-    String temp = wunderground.getCurrentTemp() + "°C";
+    String temp = String(COALESCE_D(weatherItems[WEATHER_P_TEMP])) + "°C";
     display->drawString(128, 54, temp);
-
     display->drawHorizontalLine(0, 52, 128);
-/*
-   display->setColor(WHITE);
-   display->setFont(ArialMT_Plain_10);
-   display->setTextAlignment(TEXT_ALIGN_LEFT);
-   display->drawString(0, 54, String(state->currentFrame + 1) + "/" + String(numberOfFrames));
-
-   String time = timeClient.getFormattedTime().substring(0, 5);
-   display->setTextAlignment(TEXT_ALIGN_CENTER);
-   display->drawString(38, 54, time);
-
-   display->setTextAlignment(TEXT_ALIGN_CENTER);
-   String temp = wunderground.getCurrentTemp() + "°C";
-   display->drawString(90, 54, temp);
-
-   int8_t quality = getWifiQuality();
-   for (int8_t i = 0; i < 4; i++) {
-    for (int8_t j = 0; j < 2 * (i + 1); j++) {
-      if (quality > i * 25 || j == 0) {
-        display->setPixel(120 + 2 * i, 63 - j);
-      }
-    }
-   }
-
-
-   display->setTextAlignment(TEXT_ALIGN_CENTER);
-   display->setFont(Meteocons_Plain_10);
-   String weatherIcon = wunderground.getTodayIcon();
-   int weatherIconWidth = display->getStringWidth(weatherIcon);
-   display->drawString(64, 55, weatherIcon);
-
-   display->drawHorizontalLine(0, 52, 128);
- */
 #endif
-}
-
-//IoTNodeUiCpp mainUi;
-
-// #ifdef POWER_ON
-// void setReadyForInstantPowerUpdate() {
-// //    Serial.println("Ticker: readyForInstantPowerUpdate");
-//     readyForInstantPowerUpdate = true;
-// }
-// #endif
-
-void setReadyForWeatherUpdate() {
-    Serial.println("Ticker: readyForWeatherUpdate");
-    readyForWeatherUpdate = true;
 }
 
 #ifdef DHT_ON
@@ -494,58 +432,66 @@ void publishData() {
     readyToPublishData = false;
     ledSet(LED2, HIGH);
 
-#ifdef POWER_ON
-//     const int JSON_BUFFER_SIZE = JSON_OBJECT_SIZE(5);
-//     StaticJsonBuffer<JSON_BUFFER_SIZE> jsonBuffer;
-//
-// // create JSON
-//     JsonObject& root = jsonBuffer.createObject();
-//     root["pulses"] = meter1.count;
-//     root["power"] = meter1.get_power();
-//     root["kwhr"] = meter1.elapsed_kwhr;
-//     root["delay"] = meter1.pulse_length;
-//     root["avg_power"] = meter1.average_power.avg();
-//
-// // write JSON to buffer
-//     char buffer[256];
-//     root.printTo(buffer, sizeof(buffer));
-//     if (me->mqttPublish("power", buffer, false)) {
-// //        power->clearKept();
-//     } else {
-//         Serial.println("MQTT publish fail");
-//     }
+    #ifdef POWER_ON
+        power->updateData();
+        if (me->mqttPublish("power", power->getDataJson(MQTT_DATA_COLLECTION_PERIOD_SECS), false)) {
+            power->clearKept();
+        } else {
+            Serial.println("MQTT publish fail");
+        }
+    #endif
 
-
-    //power->pulse.rollUpPulses();
-    power->updateData();
-    if (me->mqttPublish("power", power->getDataJson(MQTT_DATA_COLLECTION_PERIOD_SECS), false)) {
-        power->clearKept();
-    } else {
-        Serial.println("MQTT publish fail");
-    }
-
-#endif
-
-#ifdef DHT_ON
-    me->mqttPublish("temperature", dht.getDataJson(), true);
-#endif
+    #ifdef DHT_ON
+        me->mqttPublish("temperature", dht.getDataJson(), true);
+    #endif
 
     Serial.println("Publishing data finished.");
     ledSet(LED2, LOW);
 }
 
-void onMqttEvent(EspNodeBase::MqttEvent event, const char * topic, const char * message) {
+char * readingsRaw = NULL;
+
+void parseDelimetedString(char* buf, char** ptrs, unsigned int max, const char* raw, unsigned int len) {
+    if (len + 1 > BUF_MAX) {
+        Serial.printf("parseDelimetedString: buff %d < len %d\r\n", BUF_MAX, len + 1);
+        return;
+    }
+
+    if (len > 0) {
+        int i = 0;
+        for (i = 0; i < max; ++i) {
+            ptrs[i] = NULL;
+        }
+        memset(buf, 0, BUF_MAX);
+        strncpy(buf, raw, len);
+        buf[len] = 0;
+
+        i = 0;
+        char *p = strtok (buf, ";");
+        while (p != NULL && i < max) {
+            ptrs[i++] = p;
+            p = strtok (NULL, ";");
+        }
+    }
+}
+
+void onMqttEvent(EspNodeBase::MqttEvent event, const char * topic, const char * message, unsigned int len) {
     switch (event) {
         case EspNodeBase::MqttEvent::CONNECT:
             drawEndlessProgress((char *)F("Connecting to MQTT"), true);
-            //subscribe to what we need
+            //subscribe to what we need ?
             break;
         case EspNodeBase::MqttEvent::DISCONNECT:
             drawEndlessProgress((char *)F("Connecting to MQTT"));
             break;
         case EspNodeBase::MqttEvent::MESSAGE:
-            // message came
-            Serial.printf((char *)F("[MQTT Incoming] Topic: %s, Message: %s\r\n"), topic, message);
+            if (strcmp(topic, "readings") == 0) {
+                parseDelimetedString(bufPowerStats, powerStats, POWER_PARAMS, message, len);
+            } else if (strcmp(topic, "weather") == 0) {
+                parseDelimetedString(bufWeather, weatherItems, WEATHER_DAYS * WEATHER_PARAMS, message, len);
+            } else if (strcmp(topic, "weather-t") == 0) {
+                parseDelimetedString(bufWeatherText, weatherText, WEATHER_DAYS, message, len);
+            }
             break;
     }
 }
@@ -554,6 +500,9 @@ void setupNetworkHandlers() {
     me->registerWifiHandler([](EspNodeBase::WifiEvent e, int counter) {
         if (e == EspNodeBase::WifiEvent::CONNECTING) {
             drawEndlessProgress((char *)F("Connecting to WiFi"));
+            ledPulse(LED2, 250);
+        } else if (e == EspNodeBase::WifiEvent::FAILURE) {
+            drawEndlessProgress((char *)F("WiFi failure..."));
             ledPulse(LED2, 250);
         }
     });
@@ -584,12 +533,6 @@ void setupHardware() {
     initDisplay();
 }
 
-// #ifdef POWER_ON
-// void meter1_pulse() {
-//     meter1.pulse();
-// }
-// #endif
-
 void setup() {
     Serial.begin(SERIAL_BAUD_RATE);
     delayMs(50);
@@ -602,14 +545,12 @@ void setup() {
     initUi();
 #ifdef POWER_ON
     power->setup();
-    // pinMode(POWER_PULSE_PIN, INPUT);
-    // attachInterrupt(POWER_PULSE_PIN, meter1_pulse, RISING);
-
 #endif
     setupRegularActions();
 
-    me->mqttSubscribe("control");
-    me->mqttSubscribe("show");
+    me->mqttSubscribe("weather");
+    me->mqttSubscribe("weather-t");
+    me->mqttSubscribe("readings");
 
     Serial.println("Setup finished.");
 }
@@ -638,22 +579,17 @@ void loop() {
     power->loop();
     formattedInstantPower = power->formattedInstantPowerW(true);
 
-    // if (readyForInstantPowerUpdate) {
-    //     readyForInstantPowerUpdate = false;
-    //     meter1.update_average();
-    //     formattedInstantPower = formattedInstantPowerW(meter1.average_power.avg());
-    // }
 #endif
 
     // Let's make sure frame transition is over
     if (ui->getUiState()->frameState == FIXED) {
-        if (readyToPublishData) {
-            Serial.println("fixed and publish");
+        if (readyToPublishData && me->isConnected()) {
+            Serial.println("UI fixed, let's publish data");
             publishData();
         }
     #ifdef WEATHER_ON
         if (readyForWeatherUpdate) {
-            updateData(display);
+            updateData();
         }
     #endif
     #ifdef DHT_ON

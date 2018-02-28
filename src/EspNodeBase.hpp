@@ -13,13 +13,13 @@
 #include <vector>
 #include <Arduino.h>
 
+#define MQTT_MAX_PACKET_SIZE 512
 
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
 #include <ESP8266mDNS.h>  //For OTA
 #include <WiFiUdp.h>      //For OTA
 #include <ArduinoOTA.h>   //For OTA
-#include <TimeClient.h>
 
 #include "utils.h"
 #include "config.h"
@@ -71,24 +71,28 @@
 //https://hackaday.io/project/7342-mqopen/log/33302-mqtt-topic-structure-redesign
 
 //#define MQTT_BASE_TOPIC "world/p14/sensors/entrance/"
+#define ESPNODEBASE_MQTT_BUFF 255
+
 class EspNodeBase {
 public:
     typedef void (* THandlerFunction_Progress)(int);
     typedef void (* FRegularAction)(void);
 
-    enum WifiEvent { CONNECTING };
+    enum WifiEvent { CONNECTING = 0, FAILURE };
     typedef void (* FWifiEventHandler)(WifiEvent, int);
 
     enum MqttEvent { CONNECT = 0, DISCONNECT, MESSAGE };
-    typedef void (* FMqttEventHandler)(MqttEvent, const char *, const char *);
+    typedef void (* FMqttEventHandler)(MqttEvent, const char *, const char *, unsigned int);
 
 private:
     static EspNodeBase * _me;
+    static char * _mqttBuffer;
 
     char * id = NULL;
     char * hostname = NULL;
 
     char * mqttBaseTopic = NULL;
+
 
     // handlers. single
     ArduinoOTAClass::THandlerFunction otafStart;
@@ -114,6 +118,8 @@ public:
     void registerOtaHandlers(ArduinoOTAClass::THandlerFunction fStart, ArduinoOTAClass::THandlerFunction fEnd,ArduinoOTAClass::THandlerFunction_Progress fProgress, ArduinoOTAClass::THandlerFunction_Error fError);
     void startNetworkStack();
 
+    const bool isConnected();
+
     int mqttPublish(const char * subTopic, const char * payload, bool retained);
     int mqttPublish(const char * subTopic, const byte * payload, int len, bool retained);
 
@@ -137,7 +143,7 @@ protected:
     void mqttAnnounce();
     void mqttHeartbeat();
     void mqttSubscribe();
-    void mqttCallback(MqttEvent evt, const char * _topic, const char * msg);
+    void mqttCallback(MqttEvent evt, const char * _topic, const char * msg, unsigned int len);
     static void stMqttCallback(char * _topic, byte * _payload, unsigned int _len);
 
     EspNodeBase();
