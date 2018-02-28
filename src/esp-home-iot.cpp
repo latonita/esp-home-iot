@@ -105,9 +105,7 @@ OLEDDisplayUi * ui;
 bool readyToPublishData = false;
 void setReadyToPublishData();
 
-#ifdef WEATHER_ON
-bool readyForWeatherUpdate = false;
-#endif
+bool readyForDataUpdate = false;
 
 #ifdef DHT_ON
 bool readyForDHTUpdate = false;
@@ -134,10 +132,8 @@ char * powerStats[POWER_PARAMS] = { NULL, NULL, NULL, NULL };
 #define WEATHER_PARAMS 3
 char * bufWeather = new char[BUF_MAX]; //NULL;
 char * weatherItems[WEATHER_DAYS * WEATHER_PARAMS] = {
-    NULL, NULL, NULL,
-    NULL, NULL, NULL,
-    NULL, NULL, NULL,
-    NULL, NULL, NULL}; // 4 days x 4 params
+    NULL, NULL, NULL,NULL, NULL, NULL,NULL, NULL, NULL,NULL, NULL, NULL
+};                     // 4 days x 4 params
 char * bufWeatherText = new char[BUF_MAX]; //NULL;
 char * weatherText[WEATHER_DAYS] = { NULL, NULL, NULL, NULL };
 
@@ -149,6 +145,7 @@ char * weatherText[WEATHER_DAYS] = { NULL, NULL, NULL, NULL };
 void updateData();
 
 void drawProgress(OLEDDisplay * display, int percentage, String label);
+
 void drawDateTime(OLEDDisplay * display, OLEDDisplayUiState * state, int16_t x, int16_t y);
 #ifdef POWER_ON
 void drawInstantPower(OLEDDisplay * display, OLEDDisplayUiState * state, int16_t x, int16_t y);
@@ -206,15 +203,13 @@ void initDisplay() {
     display->init();
     display->clear();
     display->display();
-    //display->invertDisplay();
-    //display->flipScreenVertically();
     display->setFont(ArialMT_Plain_10);
     display->setTextAlignment(TEXT_ALIGN_CENTER);
     display->setContrast(180);
 }
 
 void initUi() {
-    Serial.println(F("UI Init..."));
+    Serial.println(F("OLED UI Init..."));
     ui = new OLEDDisplayUi(display);
     ui->setTargetFPS(30);
     //ui->setActiveSymbol(activeSymbole);
@@ -252,7 +247,6 @@ void drawEndlessProgress(const char * msg, bool finished = false) {
     delayMs(finished ? 500 : 100);
     counter++;
 }
-
 
 void drawProgress(OLEDDisplay * display, int percentage, String label) {
     display->clear();
@@ -371,16 +365,16 @@ void drawForecastDetails(OLEDDisplay * display, int x, int y, int dayIndex) {
     display->setTextAlignment(TEXT_ALIGN_CENTER);
     display->setFont(ArialMT_Plain_10);
     //String day = wunderground.getForecastTitle(dayIndex).substring(0, 3);
-    String day = String(COALESCE_D(weatherItems[dayIndex*WEATHER_PARAMS + WEATHER_P_DAY]));
+    String day = String(COALESCE_D(weatherItems[dayIndex * WEATHER_PARAMS + WEATHER_P_DAY]));
 
     day.toUpperCase();
     display->drawString(x + 20, y, day);
 
     display->setFont(Meteocons_Plain_21);
-    display->drawString(x + 20, y + 12, COALESCE(weatherItems[dayIndex*WEATHER_PARAMS + WEATHER_P_ICON],")"));//wunderground.getForecastIcon(dayIndex));
+    display->drawString(x + 20, y + 12, COALESCE(weatherItems[dayIndex * WEATHER_PARAMS + WEATHER_P_ICON],")"));//wunderground.getForecastIcon(dayIndex));
 
     display->setFont(ArialMT_Plain_10);
-    display->drawString(x + 20, y + 34, COALESCE_D(weatherItems[dayIndex*WEATHER_PARAMS + WEATHER_P_TEMP]));//wunderground.getForecastLowTemp(dayIndex) + "|" + wunderground.getForecastHighTemp(dayIndex));
+    display->drawString(x + 20, y + 34, COALESCE_D(weatherItems[dayIndex * WEATHER_PARAMS + WEATHER_P_TEMP]));//wunderground.getForecastLowTemp(dayIndex) + "|" + wunderground.getForecastHighTemp(dayIndex));
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 }
 #endif
@@ -433,16 +427,16 @@ void publishData() {
     ledSet(LED2, HIGH);
 
     #ifdef POWER_ON
-        power->updateData();
-        if (me->mqttPublish("power", power->getDataJson(MQTT_DATA_COLLECTION_PERIOD_SECS), false)) {
-            power->clearKept();
-        } else {
-            Serial.println("MQTT publish fail");
-        }
+    power->updateData();
+    if (me->mqttPublish("power", power->getDataJson(MQTT_DATA_COLLECTION_PERIOD_SECS), false)) {
+        power->clearKept();
+    } else {
+        Serial.println("MQTT publish fail");
+    }
     #endif
 
     #ifdef DHT_ON
-        me->mqttPublish("temperature", dht.getDataJson(), true);
+    me->mqttPublish("temperature", dht.getDataJson(), true);
     #endif
 
     Serial.println("Publishing data finished.");
@@ -518,6 +512,7 @@ void setupNetworkHandlers() {
         display->setTextAlignment(TEXT_ALIGN_CENTER_BOTH);
         display->drawString(DISPLAY_WIDTH / 2, DISPLAY_HEIGHT / 2, (char *)F("Restart"));
         display->display();
+        publishData(); //publish data before restart
     },[](unsigned int progress, unsigned int total) {
         int p = progress / (total / 100);
         display->drawProgressBar(4, 32, 120, 8, p);
@@ -584,23 +579,22 @@ void loop() {
     // Let's make sure frame transition is over
     if (ui->getUiState()->frameState == FIXED) {
         if (readyToPublishData && me->isConnected()) {
-            Serial.println("UI fixed, let's publish data");
+            Serial.println("UI is still. Let's publish data");
             publishData();
         }
-    #ifdef WEATHER_ON
-        if (readyForWeatherUpdate) {
+
+        #ifdef DHT_ON
+        readyForDataUpdate |= readyForDHTUpdate;
+        #endif
+
+        if (readyForDataUpdate) {
             updateData();
         }
-    #endif
-    #ifdef DHT_ON
-        if (readyForDHTUpdate) {
-            dht.update(&readyForDHTUpdate);
-        }
-    #endif
     }
 
     int remainingTimeBudget = ui->update();
     if (remainingTimeBudget > 0) {
+        Serial.printf("Remaining time budget %d\r\n", remainingTimeBudget);
         delayMs(remainingTimeBudget);
     }
 }
