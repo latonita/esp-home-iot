@@ -125,6 +125,7 @@ public:
 
     void addMqttEventHandler(FMqttEventHandler handler);
     bool mqttSubscribe(const char * subTopic);
+    bool mqttUnsubscribe(const char * subTopic);
 
     void addRegularAction(unsigned int, FRegularAction);
 

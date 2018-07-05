@@ -3,6 +3,9 @@
 
 #include "utils.h"
 
+char utils_buff32[33];
+char utils_buff64[65];
+
 void delayMicros(uint32_t us){
     uint32_t start = micros();
     while (micros() - start < us) {}

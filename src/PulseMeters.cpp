@@ -9,8 +9,7 @@
 #include "PulseMeters.hpp"
 #include "utils.h"
 
-
-Pulses::Pulses(double ppu) : pulsesPerUnit(ppu), averageFlow(5) {}
+Pulses::Pulses(double ppu) : averageFlow(5), pulsesPerUnit(ppu) {}
 Pulses::~Pulses(){}
 
 void Pulses::debouncedPulseISR() {

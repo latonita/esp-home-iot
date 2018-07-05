@@ -9,8 +9,8 @@
 #define MAX_UPTIME 4294967295
 #define SECONDS_IN_A_DAY 86400L
 
-static char utils_buff32[33];
-static char utils_buff64[65];
+extern char utils_buff32[33];
+extern char utils_buff64[65];
 
 const char * formatDouble40(double);
 const char * formatDouble41(double);

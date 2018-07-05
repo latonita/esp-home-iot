@@ -52,6 +52,8 @@
 //#define FORECAST_UPDATE_INTERVAL_SECS 30 * 60 // Update weather forecast every 30 minutes
 #define DHT_UPDATE_INTERVAL_SECS 1 * 60 // read from DHT sensor
 
+#define MQTT_RESUBSCRIBE_SECS 60 * 60 * 24 // resubscribe every 24 hrs, pubsubclient stops receiving subscription for some reason
+
 #define BASE_HEARTBEAT_SECS MQTT_DATA_COLLECTION_PERIOD_SECS
 
 /***************************
