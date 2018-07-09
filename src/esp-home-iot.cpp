@@ -42,9 +42,13 @@
 
 #include <Arduino.h>
 
+#include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
 #include <SSD1306Wire.h>
 #include <Wire.h>
+
+#define DISPLAY_WIDTH 128
+#define DISPLAY_HEIGHT 64
 
 #include <ArduinoOTA.h>  //For OTA
 #include <ESP8266mDNS.h> //For OTA
