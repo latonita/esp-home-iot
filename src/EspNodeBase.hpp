@@ -151,5 +151,4 @@ protected:
     ~EspNodeBase();
 };
 
-
 #endif /* esp_hpp */

@@ -1,19 +1,11 @@
-//
-//  dht_util.hpp
-//  esp8266_WeatherStationDemo
-//
-//  Created by <author> on 04/05/2017.
-//
-//
-
-#ifndef dht_util_hpp
-#define dht_util_hpp
+#ifndef TemperatureSensor_hpp
+#define TemperatureSensor_hpp
 #include "dht11.h"
 
-class dht_util {
+class TemperatureSensor {
 private:
     dht11 dht;
-    char pin;
+    unsigned char pin;
     double humidity = 50.0;
     double temperature = 22.0;
 
@@ -21,17 +13,14 @@ private:
     bool initialized = false;
 
 public:
-    dht_util(char pin);
-    ~dht_util();
+    TemperatureSensor(unsigned char pin);
+    ~TemperatureSensor();
 
     const char * formattedTemperature();
     const char * formattedHumidity();
     void update(bool * readyForDHTUpdate);
 
     const char * getDataJson();
-
-protected:
-
 };
 
-#endif /* dht_util_hpp */
+#endif

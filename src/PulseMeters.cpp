@@ -69,21 +69,25 @@ double PowerMeter::instantWatts() {
     return pulse.instantFlow;
 }
 
+const char * PowerMeter::formattedInstantPowerW(double watts) {
+#define FIP_BUF_LEN 10
+  static char formattedInstantPower[FIP_BUF_LEN + 1];
+  if (watts < 10)
+    snprintf(formattedInstantPower, FIP_BUF_LEN, ("-- W"));
+  else if (watts < 1000)
+    snprintf(formattedInstantPower, FIP_BUF_LEN, ("%s W"), formatDouble41(watts));
+  else if (watts < 1000000)
+    snprintf(formattedInstantPower, FIP_BUF_LEN, ("%s kW"), formatDouble41(watts / 1000));
+  else
+    snprintf(formattedInstantPower, FIP_BUF_LEN, ("9999.9 kW"));
+  return formattedInstantPower;
+}
+
 const char * PowerMeter::formattedInstantPowerW(bool average = false) {
   #define FIP_BUF_LEN 10
-    static char formattedInstantPower[FIP_BUF_LEN + 1];
-    double watts = average ? averageWatts() : instantWatts();
-    if (watts < 10) {
-        snprintf(formattedInstantPower, FIP_BUF_LEN, ("-- W"));
-    } else if (watts < 1000) {
-        snprintf(formattedInstantPower, FIP_BUF_LEN, ("%s W"), formatDouble40(watts));
-    } else if (watts < 1000000) {
-        snprintf(formattedInstantPower, FIP_BUF_LEN, ("%s kW"), formatDouble41(watts / 1000));
-    } else {
-        snprintf(formattedInstantPower, FIP_BUF_LEN, ("9999.9 kW"));
-    }
-    return formattedInstantPower;
+    return PowerMeter::formattedInstantPowerW(average ? averageWatts() : instantWatts());
 }
+
 /*
 WaterMeter::WaterMeter() : cold(WATER_COLD_PULSES_PER_LITER), hot(WATER_HOT_PULSES_PER_LITER) {}
 WaterMeter::~WaterMeter() {}

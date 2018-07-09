@@ -18,6 +18,7 @@
 // #define PULSE_DATA_ROLLUP_PERIOD_MS 2000ul
 // #define PULSE_DEBOUNCE 100L // 100ms = 0.1s
 
+const char *formattedInstantPowerW(double watts);
 
 class PowerMeter {
 private:
@@ -44,7 +45,8 @@ public:
   void updateData();
   void clearKept();
 
-  const char *formattedInstantPowerW(bool average); // todo remove
+  static const char *formattedInstantPowerW(double watts);
+  const char *formattedInstantPowerW(bool average);
   const char *getDataJson(unsigned int period_s);
 
 protected:

@@ -1,18 +1,10 @@
-//
-//  dht_util.cpp
-//  esp8266_WeatherStationDemo
-//
-//  Created by <author> on 04/05/2017.
-//
-//
-
-#include "dht_util.hpp"
+#include "TemperatureSensor.hpp"
 #include "utils.h"
 
-dht_util::dht_util(char pin) : pin(pin) {}
-dht_util::~dht_util() {}
+TemperatureSensor::TemperatureSensor(unsigned char pin) : pin(pin) {}
+TemperatureSensor::~TemperatureSensor() {}
 
-void dht_util::update(bool * readyForDHTUpdate) {
+void TemperatureSensor::update(bool * readyForDHTUpdate) {
     *readyForDHTUpdate = false;
     if (DHTLIB_OK == dht.read(pin)) {
         initialized = true;
@@ -24,19 +16,19 @@ void dht_util::update(bool * readyForDHTUpdate) {
     }
 }
 
-const char * dht_util::formattedHumidity() {
+const char * TemperatureSensor::formattedHumidity() {
     static char humi[8];
     strcpy(humi, formatDouble41(humidity));
     return humi;
 }
 
-const char * dht_util::formattedTemperature() {
+const char * TemperatureSensor::formattedTemperature() {
     static char temp[8];
     strcpy(temp, formatDouble41(temperature));
     return temp;
 }
 
-const char * dht_util::getDataJson() {
+const char * TemperatureSensor::getDataJson() {
     snprintf(utils_buff64, 64, "{\"temperature\":%.2f,\"humidity\":%.2f}", temperature, humidity);
     return utils_buff64;
 }
