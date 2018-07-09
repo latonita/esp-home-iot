@@ -82,6 +82,7 @@ protected:
   ~PowerMeter();
 };
 
+/*
 class WaterMeter {
 private:
   static WaterMeter *_me;
@@ -104,5 +105,5 @@ protected:
   WaterMeter();
   ~WaterMeter();
 };
-
+*/
 #endif

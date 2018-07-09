@@ -138,7 +138,7 @@ const char * PowerMeter::formattedInstantPowerW(bool average = false) {
     }
     return formattedInstantPower;
 }
-
+/*
 WaterMeter::WaterMeter() : cold(WATER_COLD_PULSES_PER_LITER), hot(WATER_HOT_PULSES_PER_LITER) {}
 WaterMeter::~WaterMeter() {}
 
@@ -194,3 +194,4 @@ void WaterMeter::loop() {
         elapsed.rearm();
     }
 }
+*/

@@ -67,6 +67,10 @@
 #include "PulseMeters.hpp"
 #endif
 
+#ifdef DOORBELL_ON
+#include "DoorBell.hpp"
+#endif
+
 EspNodeBase *me = EspNodeBase::me();
 
 /***************************
@@ -198,8 +202,6 @@ int numberOfFrames = (sizeof(frames) / sizeof(FrameCallback));
 OverlayCallback overlays[] = {drawHeaderOverlay};
 int numberOfOverlays = 1;
 
-//static char tempBuffer32[32];
-
 void subscribeToMqttTopics() {
   Serial.println("subscribeToMqttTopics()");
   me->mqttSubscribe("weather");
@@ -214,8 +216,6 @@ void resubscribeToMqttTopics() {
   me->mqttUnsubscribe("readings");
   subscribeToMqttTopics();
 }
-
-
 
 void setupRegularActions() {
   me->addRegularAction(MQTT_DATA_COLLECTION_PERIOD_SECS, setReadyToPublishData);
@@ -338,15 +338,10 @@ void drawInstantPower(OLEDDisplay *display, OLEDDisplayUiState *state,
 
   display->setFont(ArialMT_Plain_24);
   display->drawString(42 + x, 15 + y, formattedInstantPower);
-  // int tempWidth = display->getStringWidth(temp);
 
   display->drawXbm(0 + x, 5 + y, zap_width, zap_height, zap1);
-  //  display->drawXbm(86, 5 + y, zap_width, zap_height, zap2);
-  // display->setFont(Meteocons_Plain_42);
-  // String weatherIcon = wunderground.getTodayIcon();
-  // int weatherIconWidth = display->getStringWidth(weatherIcon);
-  // display->drawString(32 + x - weatherIconWidth / 2, 05 + y, weatherIcon);
 }
+
 void drawEnergyConsumption(OLEDDisplay *display, OLEDDisplayUiState *state,
                            int16_t x, int16_t y) {
   display->setTextAlignment(TEXT_ALIGN_CENTER);
@@ -490,6 +485,22 @@ void publishData() {
   ledSet(LED2, LOW);
 }
 
+const char *formattedInstantPowerW(double watts) {
+#define FIP_BUF_LEN 10
+  static char formattedInstantPower[FIP_BUF_LEN + 1];
+  if (watts < 10)
+    snprintf(formattedInstantPower, FIP_BUF_LEN, ("-- W"));
+  else if (watts < 1000)
+    snprintf(formattedInstantPower, FIP_BUF_LEN, ("%s W"),
+             formatDouble41(watts));
+  else if (watts < 1000000)
+    snprintf(formattedInstantPower, FIP_BUF_LEN, ("%s kW"),
+             formatDouble41(watts / 1000));
+  else
+    snprintf(formattedInstantPower, FIP_BUF_LEN, ("9999.9 kW"));
+  return formattedInstantPower;
+}
+
 char *readingsRaw = NULL;
 
 void parseDelimetedString(char *buf, char **ptrs, unsigned int max,
@@ -583,12 +594,36 @@ void setupNetworkHandlers() {
   me->addMqttEventHandler(onMqttEvent);
 }
 
+bool knockKnock = false;
+/*
+void doorBellCallback() {
+  Serial.println("Door bell, knock-knock!");
+  knockKnock = true;
+}
+*/
+void publishDoorBell() {
+  Serial.println("Publishing door bell ...");
+  if (me->mqttPublish("doorbell", "true", false)) {
+    knockKnock = false;
+  } else {
+    Serial.println("MQTT publish fail");
+  }
+}
+
+void setupDoorBell() {
+  DoorBell::setup();
+  DoorBell::setCallback([](){
+    Serial.println("Door bell, knock-knock!");
+    knockKnock = true;
+  });
+}
+
 void setup() {
 #ifdef POWER_ON
   //setup ISR first to minimize lost pulses during reset/power on
   power->setup();
 #endif
-  
+
   Serial.begin(SERIAL_BAUD_RATE);
   delayMs(50);
   Serial.println("Entering setup.");
@@ -605,36 +640,29 @@ void setup() {
 
   initUi();
   setupRegularActions();
+  setupDoorBell();
 
   Serial.println("Setup finished.");
-}
-
-const char *formattedInstantPowerW(double watts) {
-#define FIP_BUF_LEN 10
-  static char formattedInstantPower[FIP_BUF_LEN + 1];
-  if (watts < 10)
-    snprintf(formattedInstantPower, FIP_BUF_LEN, ("-- W"));
-  else if (watts < 1000)
-    snprintf(formattedInstantPower, FIP_BUF_LEN, ("%s W"),
-             formatDouble41(watts));
-  else if (watts < 1000000)
-    snprintf(formattedInstantPower, FIP_BUF_LEN, ("%s kW"),
-             formatDouble41(watts / 1000));
-  else
-    snprintf(formattedInstantPower, FIP_BUF_LEN, ("9999.9 kW"));
-  return formattedInstantPower;
 }
 
 void loop() {
   me->loop();
   yield();
-
+  
 #ifdef POWER_ON
   ledSet(LED1, digitalRead(POWER_PULSE_PIN));
   power->loop();
   formattedInstantPower = power->formattedInstantPowerW(true);
-
 #endif
+
+  DoorBell::loop();
+  // Let's make sure frame transition is over
+  if (ui->getUiState()->frameState == FIXED) {
+    if (knockKnock && me->isConnected()) {
+      Serial.println("UI is still. Let's publish door bell");
+      publishDoorBell();
+    }
+  }
 
   // Let's make sure frame transition is over
   if (ui->getUiState()->frameState == FIXED) {

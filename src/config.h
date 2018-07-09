@@ -28,8 +28,9 @@
  * ALL PINS HERE
  **************************/
 #define POWER_PULSE_PIN 14    // kwh pulses
-#define WATER_HOT_PULSE_PIN 13    // kwh pulses
-#define WATER_COLD_PULSE_PIN 16    // kwh pulses
+#define DOORBELL_PIN 13 
+//#define WATER_HOT_PULSE_PIN 13    // kwh pulses
+//#define WATER_COLD_PULSE_PIN 16    // kwh pulses
 
 #define ANOTHER_PIN 13  // one more signal pin available, will be shorted to ground by external device
 #define LED_PIN 15
@@ -49,7 +50,6 @@
  * Data collection periods
  **************************/
 #define MQTT_DATA_COLLECTION_PERIOD_SECS 1 * 60 // time to collect data before posting to mqtt
-//#define FORECAST_UPDATE_INTERVAL_SECS 30 * 60 // Update weather forecast every 30 minutes
 #define DHT_UPDATE_INTERVAL_SECS 1 * 60 // read from DHT sensor
 
 #define MQTT_RESUBSCRIBE_SECS 60 * 60 * 24 // resubscribe every 24 hrs, pubsubclient stops receiving subscription for some reason
@@ -62,6 +62,7 @@
 #define DHT_ON
 #define WEATHER_ON
 #define POWER_ON
+#define DOORBELL_ON
 
 /***************************
  * Other
@@ -70,5 +71,5 @@
 
 #define POWER_PULSES_PER_WATT_HOUR 1.60 //1600 pulses = 1000 W*h
 
-#define WATER_COLD_PULSES_PER_LITER 1
-#define WATER_HOT_PULSES_PER_LITER 1
+// #define WATER_COLD_PULSES_PER_LITER 1
+// #define WATER_HOT_PULSES_PER_LITER 1
