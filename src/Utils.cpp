@@ -1,7 +1,7 @@
 #ifndef _LATONITA_UTILS_C_
 #define _LATONITA_UTILS_C_
 
-#include "utils.h"
+#include "Utils.h"
 
 char utils_buff32[33];
 char utils_buff64[65];

@@ -21,8 +21,8 @@
 #include <WiFiUdp.h>      //For OTA
 #include <ArduinoOTA.h>   //For OTA
 
-#include "utils.h"
-#include "config.h"
+#include "Utils.h"
+#include "Config.h"
 
 #define TOPIC_SYS_ID "$id"
 #define TOPIC_SYS_IP "$ip"

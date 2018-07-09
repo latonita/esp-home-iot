@@ -7,7 +7,7 @@
 //
 
 #include "PulseMeters.hpp"
-#include "utils.h"
+#include "Utils.h"
 
 PowerMeter::PowerMeter() : pulse(POWER_PULSES_PER_WATT_HOUR) {}
 PowerMeter::~PowerMeter() {}

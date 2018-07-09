@@ -1,5 +1,5 @@
 #include "TemperatureSensor.hpp"
-#include "utils.h"
+#include "Utils.h"
 
 TemperatureSensor::TemperatureSensor(unsigned char pin) : pin(pin) {}
 TemperatureSensor::~TemperatureSensor() {}
