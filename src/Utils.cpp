@@ -98,4 +98,30 @@ void TimeProvider::updateTime() {
     return;
 }
 
+
+void parseDelimetedString(char *buf, char **ptrs, unsigned int max,
+                          const char *raw, unsigned int len) {
+  if (len + 1 > BUF_MAX) {
+    Serial.printf("parseDelimetedString: buff %d < len %d\r\n", BUF_MAX, len + 1);
+    return;
+  }
+
+  if (len > 0) {
+    unsigned int i = 0;
+    for (i = 0; i < max; ++i)
+      ptrs[i] = NULL;
+    memset(buf, 0, BUF_MAX);
+    strncpy(buf, raw, len);
+    buf[len] = 0;
+
+    i = 0;
+    char *p = strtok(buf, ";");
+    while (p != NULL && i < max) {
+      ptrs[i++] = p;
+      p = strtok(NULL, ";");
+    }
+  }
+}
+
+
 #endif

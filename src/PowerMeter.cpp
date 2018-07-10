@@ -1,13 +1,8 @@
-//
-//  PowerPulse.cpp
-//  esp-home-iot
-//
-//  Created by <author> on 08/05/2017.
-//
-//
-
-#include "PulseMeters.hpp"
+#include "Config.h"
+#ifdef POWER_ON
+#include "PowerMeter.hpp"
 #include "Utils.h"
+
 
 PowerMeter::PowerMeter() : pulse(POWER_PULSES_PER_WATT_HOUR) {}
 PowerMeter::~PowerMeter() {}
@@ -145,3 +140,5 @@ void WaterMeter::loop() {
     }
 }
 */
+
+#endif //POWER_ON

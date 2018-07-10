@@ -35,5 +35,9 @@
         "tuple": "cpp",
         "typeinfo": "cpp",
         "utility": "cpp"
+    },
+    "terminal.integrated.env.linux": {
+        "PATH": "/home/user/.platformio/penv/bin:/home/user/.platformio/penv:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+        "PLATFORMIO_CALLER": "vscode"
     }
 }

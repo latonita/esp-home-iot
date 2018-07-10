@@ -1,22 +1,12 @@
-//
-//  PowerPulse.hpp
-//  esp-home-iot
-//
-//  Created by <author> on 08/05/2017.
-//
-//
+#include "Config.h"
+#ifdef POWER_ON
 
-#ifndef PulseMeters_hpp
-#define PulseMeters_hpp
+#ifndef PowerMeter_hpp
+#define PowerMeter_hpp
 
 #include <Arduino.h>
 #include <stdio.h>
-#include "Config.h"
-//#include <RunningAverage.h>
 #include "Pulses.hpp"
-
-// #define PULSE_DATA_ROLLUP_PERIOD_MS 2000ul
-// #define PULSE_DEBOUNCE 100L // 100ms = 0.1s
 
 const char *formattedInstantPowerW(double watts);
 
@@ -54,28 +44,6 @@ protected:
   ~PowerMeter();
 };
 
-/*
-class WaterMeter {
-private:
-  static WaterMeter *_me;
-  Pulses cold;
-  Pulses hot;
+#endif
 
-  static WaterMeter *me();
-  static void onColdPulseISR();
-  static void onHotPulseISR();
-
-  void setup();
-  void loop();
-  void setPPU(double ppuCold, double ppuHot);
-  void updateData();
-  void clearKept();
-
-  void calcWater();
-
-protected:
-  WaterMeter();
-  ~WaterMeter();
-};
-*/
 #endif

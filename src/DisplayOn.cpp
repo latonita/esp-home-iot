@@ -1,6 +1,8 @@
+#include "Config.h"
+#ifdef DISPLAY_ON
 #include "DisplayOn.h"
 #include "TemperatureSensor.hpp"
-#include "PulseMeters.hpp"
+#include "PowerMeter.hpp"
 
 SSD1306Wire * DisplayOn::display = NULL;
 OLEDDisplayUi * DisplayOn::ui = NULL;
@@ -235,3 +237,4 @@ void DisplayOn::drawHeaderOverlay(OLEDDisplay *display, OLEDDisplayUiState *stat
 #endif
 }
 
+#endif //DISPLAY_ON

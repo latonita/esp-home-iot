@@ -8,10 +8,8 @@
 
 #ifdef MAKE_POWER_METER
     // Pins
-    #define LED_PIN 15
-    #define LED_PIN2 2
-    #define LED1 LED_PIN
-    #define LED2 LED_PIN2
+    #define LED_POWER_PULSE 15
+    #define LED_INFO 2
 
     #define POWER_PULSE_PIN 14
     #define DOORBELL_PIN 13 
@@ -35,6 +33,8 @@
 #ifdef MAKE_WATER_METER
     #define WATER_HOT_PULSE_PIN 13    // kwh pulses
     #define WATER_COLD_PULSE_PIN 16    // kwh pulses
+
+    #define LED_INFO 5
 
     #define WATER_COLD_PULSES_PER_LITER 1
     #define WATER_HOT_PULSES_PER_LITER 1

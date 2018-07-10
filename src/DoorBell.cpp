@@ -1,3 +1,5 @@
+#include "Config.h"
+#ifdef DOORBELL_ON
 #include "DoorBell.hpp"
 
 std::function<void()> DoorBell::callback = NULL;
@@ -28,3 +30,5 @@ void DoorBell::onDoorBellISR() {
         bell = true;
     }
 }}
+
+#endif //DOORBELL_ON

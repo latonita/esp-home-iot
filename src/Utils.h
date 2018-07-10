@@ -9,6 +9,8 @@
 #define MAX_UPTIME 4294967295
 #define SECONDS_IN_A_DAY 86400L
 
+#define BUF_MAX 255
+
 extern char utils_buff32[33];
 extern char utils_buff64[65];
 
@@ -58,6 +60,7 @@ public:
     }
 };
 
+void parseDelimetedString(char *buf, char **ptrs, unsigned int max, const char *raw, unsigned int len);
 
 #define setupLed(x) pinMode(x,OUTPUT); ledOff(x)
 #define ledOn(x) digitalWrite(x,HIGH)

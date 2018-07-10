@@ -1,8 +1,8 @@
+#include "Config.h"
+#ifdef DOORBELL_ON
 #ifndef _DOOR_BELL_H_
 #define _DOOR_BELL_H_
-
 #include <Arduino.h>
-#include "Config.h"
 
 #define DOORBELL_DEBOUNCE 15 * 1000 // 15 seconds
 
@@ -21,4 +21,5 @@ class DoorBell {
     static void onDoorBellISR();
 };
 
+#endif 
 #endif 

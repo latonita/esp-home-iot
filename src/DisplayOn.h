@@ -1,7 +1,9 @@
+#include "Config.h"
+#ifdef DISPLAY_ON
+
 #ifndef DISPLAY_ON_H
 #define DISPLAY_ON_H
 
-#include "Config.h"
 #include "Utils.h"
 #include "EspNodeBase.hpp"
 
@@ -13,8 +15,6 @@
 #include "res/LatonitaIcons.h"
 #include "res/WeatherStationFonts.h"
 #include "res/WeatherStationImages.h"
-
-#define BUF_MAX 255
 
 // Display settings
 #define DISPLAY_WIDTH 128
@@ -77,4 +77,6 @@ static OverlayCallback overlays[];
 static const int numberOfOverlays = 1;
 };
 
-#endif
+#endif // _H_
+
+#endif //DISPLAY_ON

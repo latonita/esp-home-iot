@@ -59,8 +59,12 @@
 #endif
 
 #ifdef POWER_ON
-  #include "PulseMeters.hpp"
+  #include "PowerMeter.hpp"
   PowerMeter *power = PowerMeter::me();
+#endif
+
+#ifdef WATER_ON
+  #include "WaterMeter.hpp"
 #endif
 
 #ifdef DHT_ON
@@ -77,18 +81,25 @@
 bool readyToPublishData = false;
 bool readyForDataUpdate = false;
 
-void subscribeToMqttTopics() {
-  Serial.println("subscribeToMqttTopics()");
-  EspNodeBase::me()->mqttSubscribe("weather");
-  EspNodeBase::me()->mqttSubscribe("weather-t");
-  EspNodeBase::me()->mqttSubscribe("readings");
-}
+char* topicsOfInterest[] = { ""
+  #ifdef DISPLAY_ON
+    ,"weather", "weather-t", "readings"
+  #endif
+};
+int topicsOfInterestNum = (sizeof(topicsOfInterest) / sizeof(topicsOfInterest[0])) - 1;
 
 void unSubscribeFromMqttTopics() {
   Serial.println("unSubscribeFromMqttTopics()");
-  EspNodeBase::me()->mqttUnsubscribe("weather");
-  EspNodeBase::me()->mqttUnsubscribe("weather-t");
-  EspNodeBase::me()->mqttUnsubscribe("readings");
+  for (int i = 1; i <= topicsOfInterestNum; i++) {
+    EspNodeBase::me()->mqttUnsubscribe(topicsOfInterest[i]);
+  }
+}
+
+void subscribeToMqttTopics() {
+  Serial.println("subscribeToMqttTopics()");
+  for (int i = 1; i <= topicsOfInterestNum; i++) {
+    EspNodeBase::me()->mqttSubscribe(topicsOfInterest[i]);
+  }
 }
 
 void setupRegularActions() {
@@ -112,25 +123,28 @@ void setupRegularActions() {
 void updateData() {
   readyForDataUpdate = false;
   Serial.println("Data update...");
-
-  DisplayOn::drawProgress(DisplayOn::display, 10, "Updating time...");
+  #ifdef DISPLAY_ON
+    DisplayOn::drawProgress(DisplayOn::display, 10, "Updating time...");
+  #endif 
   EspNodeBase::me()->getTimeProvider()->updateTime();
-  ledPulse(LED2, 250);
+  ledPulse(LED_INFO, 250);
 
 #ifdef DHT_ON
   DisplayOn::drawProgress(DisplayOn::display, 50, "Updating DHT Sensor");
   dht.update(&readyForDHTUpdate);
-  ledPulse(LED2, 250);
+  ledPulse(LED_INFO, 250);
 #endif
 
-  DisplayOn::drawProgress(DisplayOn::display, 100, "Done...");
-  ledPulse(LED2, 250);
+  #ifdef DISPLAY_ON
+    DisplayOn::drawProgress(DisplayOn::display, 100, "Done...");
+  #endif 
+  ledPulse(LED_INFO, 250);
 }
 
 void publishData() {
   Serial.println("Publishing data ...");
   readyToPublishData = false;
-  ledSet(LED2, HIGH);
+  ledSet(LED_INFO, HIGH);
 
 #ifdef POWER_ON
   power->updateData();
@@ -140,58 +154,49 @@ void publishData() {
     Serial.println("MQTT publish fail");
 #endif
 
+#ifdef WATER_ON
+  WaterMeter::me()->updateData();
+  if (EspNodeBase::me()->mqttPublish("water", WaterMeter::me()->getDataJson(MQTT_DATA_COLLECTION_PERIOD_SECS), false))
+    WaterMeter::me()->clearKept();
+  else
+    Serial.println("MQTT publish fail");
+#endif
+
 #ifdef DHT_ON
   EspNodeBase::me()->mqttPublish("temperature", dht.getDataJson(), true);
 #endif
 
   Serial.println("Publishing data finished.");
-  ledSet(LED2, LOW);
+  ledSet(LED_INFO, LOW);
 }
 
 char *readingsRaw = NULL;
-void parseDelimetedString(char *buf, char **ptrs, unsigned int max,
-                          const char *raw, unsigned int len) {
-  if (len + 1 > BUF_MAX) {
-    Serial.printf("parseDelimetedString: buff %d < len %d\r\n", BUF_MAX, len + 1);
-    return;
-  }
-
-  if (len > 0) {
-    unsigned int i = 0;
-    for (i = 0; i < max; ++i)
-      ptrs[i] = NULL;
-    memset(buf, 0, BUF_MAX);
-    strncpy(buf, raw, len);
-    buf[len] = 0;
-
-    i = 0;
-    char *p = strtok(buf, ";");
-    while (p != NULL && i < max) {
-      ptrs[i++] = p;
-      p = strtok(NULL, ";");
-    }
-  }
-}
 
 void onMqttEvent(EspNodeBase::MqttEvent event, const char *topic, const char *message, unsigned int len) {
   switch (event) {
   case EspNodeBase::MqttEvent::CONNECT:
     Serial.println("onMqttEvent::CONNECT");
-    DisplayOn::drawEndlessProgress((char *)F("Connecting to MQTT"), true);
+    #ifdef DISPLAY_ON
+      DisplayOn::drawEndlessProgress("Connecting to MQTT", true);
+    #endif 
     subscribeToMqttTopics();
     break;
   case EspNodeBase::MqttEvent::DISCONNECT:
     Serial.println("onMqttEvent::DISCONNECT");
-    DisplayOn::drawEndlessProgress((char *)F("Connecting to MQTT"));
+    #ifdef DISPLAY_ON
+      DisplayOn::drawEndlessProgress("Connecting to MQTT");
+    #endif 
     break;
   case EspNodeBase::MqttEvent::MESSAGE:
     Serial.println("onMqttEvent::MESSAGE");
-    if (strcmp(topic, "readings") == 0)
-      parseDelimetedString(DisplayOn::bufPowerStats, DisplayOn::powerStats, POWER_PARAMS, message, len);
-    else if (strcmp(topic, "weather") == 0)
-      parseDelimetedString(DisplayOn::bufWeather, DisplayOn::weatherItems, WEATHER_DAYS * WEATHER_PARAMS, message, len);
-    else if (strcmp(topic, "weather-t") == 0)
-      parseDelimetedString(DisplayOn::bufWeatherText, DisplayOn::weatherText, WEATHER_DAYS, message, len);
+    #ifdef DISPLAY_ON
+      if (strcmp(topic, "readings") == 0)
+        parseDelimetedString(DisplayOn::bufPowerStats, DisplayOn::powerStats, POWER_PARAMS, message, len);
+      else if (strcmp(topic, "weather") == 0)
+        parseDelimetedString(DisplayOn::bufWeather, DisplayOn::weatherItems, WEATHER_DAYS * WEATHER_PARAMS, message, len);
+      else if (strcmp(topic, "weather-t") == 0)
+        parseDelimetedString(DisplayOn::bufWeatherText, DisplayOn::weatherText, WEATHER_DAYS, message, len);
+    #endif
     break;
 
   }
@@ -200,11 +205,15 @@ void onMqttEvent(EspNodeBase::MqttEvent event, const char *topic, const char *me
 void setupNetworkHandlers() {
   EspNodeBase::me()->registerWifiHandler([](EspNodeBase::WifiEvent e, int counter) {
     if (e == EspNodeBase::WifiEvent::CONNECTING) {
-      DisplayOn::drawEndlessProgress((char *)F("Connecting to WiFi"));
-      ledPulse(LED2, 250);
+      #ifdef DISPLAY_ON
+        DisplayOn::drawEndlessProgress("Connecting to WiFi");
+      #endif
+      ledPulse(LED_INFO, 250);
     } else if (e == EspNodeBase::WifiEvent::FAILURE) {
-      DisplayOn::drawEndlessProgress((char *)F("WiFi failure..."));
-      ledPulse(LED2, 250);
+      #ifdef DISPLAY_ON
+        DisplayOn::drawEndlessProgress("WiFi failure...");
+      #endif
+      ledPulse(LED_INFO, 250);
     }
   });
   #ifdef DISPLAY_ON
@@ -213,14 +222,14 @@ void setupNetworkHandlers() {
           DisplayOn::display->clear();
           DisplayOn::display->setFont(ArialMT_Plain_10);
           DisplayOn::display->setTextAlignment(TEXT_ALIGN_CENTER_BOTH);
-          DisplayOn::display->drawString(DISPLAY_WIDTH / 2, DISPLAY_HEIGHT / 2 - 10, (char *)F("OTA Update"));
+          DisplayOn::display->drawString(DISPLAY_WIDTH / 2, DISPLAY_HEIGHT / 2 - 10, "OTA Update");
           DisplayOn::display->display();
         },
         []() {
           DisplayOn::display->clear();
           DisplayOn::display->setFont(ArialMT_Plain_10);
           DisplayOn::display->setTextAlignment(TEXT_ALIGN_CENTER_BOTH);
-          DisplayOn::display->drawString(DISPLAY_WIDTH / 2, DISPLAY_HEIGHT / 2, (char *)F("Restart"));
+          DisplayOn::display->drawString(DISPLAY_WIDTH / 2, DISPLAY_HEIGHT / 2, "Restart");
           DisplayOn::display->display();
           publishData(); // publish data before restart
         },
@@ -228,7 +237,7 @@ void setupNetworkHandlers() {
           int p = progress / (total / 100);
           DisplayOn::display->drawProgressBar(4, 32, 120, 8, p);
           DisplayOn::display->display();
-          ledSet(LED2, (p & 1) ? LOW : HIGH);
+          ledSet(LED_INFO, (p & 1) ? LOW : HIGH);
         },
         NULL);
   #else
@@ -239,7 +248,7 @@ void setupNetworkHandlers() {
       },
       [](unsigned int progress, unsigned int total) {
         int p = progress / (total / 100);
-        ledSet(LED2, (p & 1) ? LOW : HIGH);
+        ledSet(LED_INFO, (p & 1) ? LOW : HIGH);
       },
       NULL);
   #endif
@@ -267,20 +276,22 @@ void setupNetworkHandlers() {
 
 
 void setup() {
+    //setup ISRs first to minimize lost pulses during reset/power on
   #ifdef POWER_ON
-    //setup ISR first to minimize lost pulses during reset/power on
     power->setup();
+    setupLed(LED_POWER_PULSE);
+  #endif
+  #ifdef WATER_ON
+    WaterMeter::me()->setup();
   #endif
 
   Serial.begin(SERIAL_BAUD_RATE);
   delayMs(50);
   Serial.println("Entering setup.");
   delayMs(50);
-  
+
+  setupLed(LED_INFO);
   EspNodeBase::me()->setup();
-  
-  setupLed(LED1);
-  setupLed(LED2);
 
   #ifdef DISPLAY_ON
     DisplayOn::initDisplayAndUI();
@@ -290,7 +301,10 @@ void setup() {
   EspNodeBase::me()->startNetworkStack();
 
   setupRegularActions();
-  setupDoorBell();
+  
+  #ifdef DOORBELL_ON
+    setupDoorBell();
+  #endif
 
   updateData();
 
@@ -302,7 +316,7 @@ void loop() {
   yield();
   
 #ifdef POWER_ON
-  ledSet(LED1, digitalRead(POWER_PULSE_PIN));
+  ledSet(LED_POWER_PULSE, digitalRead(POWER_PULSE_PIN));
   power->loop();
   #ifdef DISPLAY_ON
     DisplayOn::formattedInstantPower = power->formattedInstantPowerW(true);
@@ -311,17 +325,16 @@ void loop() {
 
 #ifdef DOORBELL_ON
   DoorBell::loop();
-#endif 
-
-#ifdef DISPLAY_ON
-  if (DisplayOn::isFixed()) {
-#endif    
-    if (someoneAtTheDoor && EspNodeBase::me()->isConnected()) {
-      Serial.println("UI is still. Let's publish door bell");
-      publishDoorBell();
+  #ifdef DISPLAY_ON
+    if (DisplayOn::isFixed()) {
+  #endif    
+      if (someoneAtTheDoor && EspNodeBase::me()->isConnected()) {
+        Serial.println("UI is still. Let's publish door bell");
+        publishDoorBell();
+      }
+  #ifdef DISPLAY_ON
     }
-#ifdef DISPLAY_ON
-  }
+  #endif
 #endif
 
 #ifdef DISPLAY_ON
