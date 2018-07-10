@@ -16,6 +16,11 @@
 
 #define BUF_MAX 255
 
+// Display settings
+#define DISPLAY_WIDTH 128
+#define DISPLAY_HEIGHT 64
+#define DISPLAY_BUFFER_SIZE 1024
+
 struct DisplayOn {
     static SSD1306Wire *display;
     static OLEDDisplayUi *ui;

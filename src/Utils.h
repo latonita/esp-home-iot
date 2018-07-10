@@ -28,6 +28,7 @@ private:
     static TimeProvider * _me;
 protected:
     TimeProvider();
+    virtual ~TimeProvider();
 public:
     static TimeProvider * me();
 

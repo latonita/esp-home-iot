@@ -32,6 +32,7 @@ TimeProvider * TimeProvider::me() {
     if (_me == NULL) {
         _me = new TimeProvider();
     }
+    return _me;
 }
 
 void TimeProvider::setProvider(TimeProvider * p) {
@@ -40,6 +41,8 @@ void TimeProvider::setProvider(TimeProvider * p) {
     }
     _me = p;
 }
+
+TimeProvider::~TimeProvider() {}
 
 const char * TimeProvider::secondsToString(unsigned long t) {
     static char str[12];

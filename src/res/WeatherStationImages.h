@@ -1,4 +1,4 @@
-const char activeSymbole[] PROGMEM = {
+const uint8_t activeSymbole[] PROGMEM = {
     B00000000,
     B00000000,
     B00011000,
@@ -9,7 +9,7 @@ const char activeSymbole[] PROGMEM = {
     B00011000
 };
 
-const char inactiveSymbole[] PROGMEM = {
+const uint8_t inactiveSymbole[] PROGMEM = {
     B00000000,
     B00000000,
     B00000000,
@@ -20,7 +20,7 @@ const char inactiveSymbole[] PROGMEM = {
     B00000000
 };
 
-const char emptySymbol[] PROGMEM = {
+const uint8_t emptySymbol[] PROGMEM = {
     B00000000,
     B00000000,
     B00000000,
