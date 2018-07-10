@@ -9,10 +9,10 @@
 #ifndef PulseMeters_hpp
 #define PulseMeters_hpp
 
-#include "config.h"
 #include <Arduino.h>
-//#include <RunningAverage.h>
 #include <stdio.h>
+#include "Config.h"
+//#include <RunningAverage.h>
 #include "Pulses.hpp"
 
 // #define PULSE_DATA_ROLLUP_PERIOD_MS 2000ul

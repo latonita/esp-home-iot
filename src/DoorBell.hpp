@@ -1,8 +1,8 @@
 #ifndef _DOOR_BELL_H_
 #define _DOOR_BELL_H_
 
-#include "config.h"
 #include <Arduino.h>
+#include "Config.h"
 
 #define DOORBELL_DEBOUNCE 15 * 1000 // 15 seconds
 
