@@ -329,7 +329,7 @@ void loop() {
     if (DisplayOn::isFixed()) {
   #endif    
       if (someoneAtTheDoor && EspNodeBase::me()->isConnected()) {
-        Serial.println("UI is still. Let's publish door bell");
+        Serial.println("Let's publish door bell");
         publishDoorBell();
       }
   #ifdef DISPLAY_ON
@@ -341,7 +341,7 @@ void loop() {
   if (DisplayOn::isFixed()) {
 #endif    
     if (readyToPublishData && EspNodeBase::me()->isConnected()) {
-      Serial.println("UI is still. Let's publish data");
+      Serial.println("Let's publish sensor data");
       publishData();
 #ifdef DISPLAY_ON
   }

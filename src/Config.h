@@ -31,8 +31,8 @@
 #endif // MAKE_POWER_METER
 
 #ifdef MAKE_WATER_METER
-    #define WATER_HOT_PULSE_PIN 13    // kwh pulses
-    #define WATER_COLD_PULSE_PIN 16    // kwh pulses
+    #define WATER_COLD_PULSE_PIN 13
+    #define WATER_HOT_PULSE_PIN  12
 
     #define LED_INFO 5
 
