@@ -1,11 +1,3 @@
-//
-//  esp.hpp
-//  esp8266_WeatherStationDemo
-//
-//  Created by Anton Viktorov<author> on 04/05/2017.
-//
-//
-
 #ifndef EspNodeBase_hpp
 #define EspNodeBase_hpp
 

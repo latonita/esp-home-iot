@@ -1,5 +1,5 @@
+#include "../Sys/Utils.h"
 #include "Pulses.hpp"
-#include "Utils.h"
 
 Pulses::Pulses(double ppu) : averageFlow(5), pulsesPerUnit(ppu) {}
 Pulses::~Pulses(){}

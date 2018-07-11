@@ -1,13 +1,5 @@
-//
-//  EspNodeService.cpp
-//  esp-home-iot
-//
-//  Created by Anton Viktorov on 2017/05/11.
-//
-//
-
 #include "EspNodeService.hpp"
-#include "Config.h"
+#include "../Config.h"
 #include <WString.h>
 
 

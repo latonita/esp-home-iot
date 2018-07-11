@@ -1,4 +1,4 @@
-#include "Config.h"
+#include "../Config.h"
 #ifdef WATER_ON
 
 #ifndef WaterMeter_hpp

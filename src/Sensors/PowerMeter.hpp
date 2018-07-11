@@ -1,4 +1,4 @@
-#include "Config.h"
+#include "../Config.h"
 #ifdef POWER_ON
 
 #ifndef PowerMeter_hpp

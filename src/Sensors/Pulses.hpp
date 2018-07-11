@@ -1,10 +1,11 @@
+#include "../Config.h"
+
 #ifndef Pulses_hpp
 #define Pulses_hpp
 
 #include <Arduino.h>
 #include <stdio.h>
 #include <RunningAverage.h>
-#include "Config.h"
 
 #define PULSE_DATA_ROLLUP_PERIOD_MS 2000ul
 #define PULSE_DEBOUNCE 100L // 100ms = 0.1s

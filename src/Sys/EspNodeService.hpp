@@ -1,11 +1,3 @@
-//
-//  EspNodeService.hpp
-//  esp-home-iot
-//
-//  Created by Anton Viktorov on 2017/05/11.
-//
-//
-
 #ifndef EspNodeService_hpp
 #define EspNodeService_hpp
 

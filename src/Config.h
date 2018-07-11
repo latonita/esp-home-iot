@@ -2,6 +2,7 @@
 #define DEVICE_CONFIG_H
 
 #include "ConfigBase.h"
+#include "ver.h"
 
 #define SERIAL_BAUD_RATE 115200 //however esp8266 boots at 74880 baud after power on.
 #define UTC_OFFSET 3

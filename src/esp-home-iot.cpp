@@ -45,9 +45,8 @@
 #include <PubSubClient.h>
 
 #include "Config.h"
-#include "EspNodeBase.hpp"
-#include "Utils.h"
-#include "ver.h"
+#include "Sys/EspNodeBase.hpp"
+#include "Sys/Utils.h"
 
 #ifdef DISPLAY_ON
   #include "DisplayOn.h"
@@ -59,22 +58,22 @@
 #endif
 
 #ifdef POWER_ON
-  #include "PowerMeter.hpp"
+  #include "Sensors/PowerMeter.hpp"
   PowerMeter *power = PowerMeter::me();
 #endif
 
 #ifdef WATER_ON
-  #include "WaterMeter.hpp"
+  #include "Sensors/WaterMeter.hpp"
 #endif
 
 #ifdef DHT_ON
-  #include "TemperatureSensor.hpp"
+  #include "Sensors/TemperatureSensor.hpp"
   TemperatureSensor dht(DHT_PIN);
   bool readyForDHTUpdate = false;
 #endif
 
 #ifdef DOORBELL_ON
-  #include "DoorBell.hpp"
+  #include "Sensors/DoorBell.hpp"
   bool someoneAtTheDoor = false;
 #endif
 

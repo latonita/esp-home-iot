@@ -1,3 +1,6 @@
+#include "../Config.h"
+#ifdef DHT_ON
+
 #ifndef TemperatureSensor_hpp
 #define TemperatureSensor_hpp
 #include "dht11.h"
@@ -23,4 +26,5 @@ public:
     const char * getDataJson();
 };
 
+#endif
 #endif

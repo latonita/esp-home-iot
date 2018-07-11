@@ -1,5 +1,7 @@
+#include "../Config.h"
+#ifdef DHT_ON
+#include "../Sys/Utils.h"
 #include "TemperatureSensor.hpp"
-#include "Utils.h"
 
 TemperatureSensor::TemperatureSensor(unsigned char pin) : pin(pin) {}
 TemperatureSensor::~TemperatureSensor() {}
@@ -32,3 +34,4 @@ const char * TemperatureSensor::getDataJson() {
     snprintf(utils_buff64, 64, "{\"temperature\":%.2f,\"humidity\":%.2f}", temperature, humidity);
     return utils_buff64;
 }
+#endif

@@ -1,8 +1,8 @@
 #include "Config.h"
 #ifdef DISPLAY_ON
 #include "DisplayOn.h"
-#include "TemperatureSensor.hpp"
-#include "PowerMeter.hpp"
+#include "Sensors/TemperatureSensor.hpp"
+#include "Sensors/PowerMeter.hpp"
 
 SSD1306Wire * DisplayOn::display = NULL;
 OLEDDisplayUi * DisplayOn::ui = NULL;

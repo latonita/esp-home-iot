@@ -1,8 +1,8 @@
-#include "Config.h"
+#include "../Config.h"
 #ifdef WATER_ON
 
 #include "WaterMeter.hpp"
-#include "Utils.h"
+#include "../Sys/Utils.h"
 
 
 WaterMeter::WaterMeter() : cold(WATER_COLD_PULSES_PER_LITER), hot(WATER_HOT_PULSES_PER_LITER) {}

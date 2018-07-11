@@ -1,7 +1,7 @@
-#include "Config.h"
+#include "../Config.h"
 #ifdef POWER_ON
+#include "../Sys/Utils.h"
 #include "PowerMeter.hpp"
-#include "Utils.h"
 
 
 PowerMeter::PowerMeter() : pulse(POWER_PULSES_PER_WATT_HOUR) {}

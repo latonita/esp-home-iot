@@ -2,8 +2,8 @@
 #define HttpTimeProvider_hpp
 
 #include <stdio.h>
-#include "Utils.h"
-#include "Config.h"
+#include "../Sys/Utils.h"
+#include "../Config.h"
 
 #define HTTP_TIME_PORT 80
 #define HTTP_TIME_URL "tank.local"

@@ -1,4 +1,4 @@
-#include "Config.h"
+#include "../Config.h"
 #ifdef DOORBELL_ON
 #ifndef _DOOR_BELL_H_
 #define _DOOR_BELL_H_
