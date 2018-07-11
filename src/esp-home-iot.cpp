@@ -81,7 +81,7 @@
 bool readyToPublishData = false;
 bool readyForDataUpdate = false;
 
-char* topicsOfInterest[] = { ""
+const char* topicsOfInterest[] = { ""
   #ifdef DISPLAY_ON
     ,"weather", "weather-t", "readings"
   #endif

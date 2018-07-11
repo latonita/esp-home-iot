@@ -70,7 +70,7 @@ void WaterMeter::loop() {
 
 const char * WaterMeter::getDataJson(unsigned int period_s) {
     secondsKept += period_s;
-    snprintf(utils_buff64, 64, "{\"p_cold\":%d,\"p_hot\":%d,\"seconds\":%d}", cold.pulsesKept, hot.pulsesKept);
+    snprintf(utils_buff64, 64, "{\"p_cold\":%d,\"p_hot\":%d,\"seconds\":%d}", cold.pulsesKept, hot.pulsesKept, secondsKept);
     return utils_buff64;
 }
 
