@@ -8,7 +8,6 @@
 #define UTC_OFFSET 3
 
 #ifdef MAKE_POWER_METER
-    // Pins
     #define LED_POWER_PULSE 15
     #define LED_INFO 2
 
@@ -41,6 +40,14 @@
     #define WATER_HOT_PULSES_PER_LITER 1
 
     #define WATER_ON
+#endif
+
+#ifdef MAKE_CO2_METER
+    #define MQ135_PIN  12
+
+    #define LED_INFO 16
+
+    #define CO2_ON
 #endif
 
 

@@ -123,11 +123,11 @@ public:
 
     TimeProvider * getTimeProvider();
 
-    void setup();
+    void setup(const char ** options, const int num);
     void loop();
 
 protected:
-    void printVersion();
+    void printVersion(const char ** options, const int num);
     void setupWifi();
     void setupOta();
     void setupMqtt();

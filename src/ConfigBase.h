@@ -7,6 +7,7 @@
 #define WIFI_SSID "LAWIRELESS"    // my wireless network. use yours.. i'm using env variables to set real ssid and password
 #define WIFI_PWD "MegaPass!"      // your super mega secret password for wifi. i'm using env variables to set real ssid and password
 #define OTA_PASSWORD "Secret!"    // your super mega secret password for OTA update. i'm using env variables to set real ssid and password
+#define OTA_PORT 8266
 
 #define MQTT_SERVER "192.168.3.3" // MQTT server
 #define MQTT_PORT 1883

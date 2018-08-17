@@ -16,7 +16,7 @@ EspNodeBase *EspNodeBase::me() {
 
 #define BUFFLEN 100
 EspNodeBase::EspNodeBase()
-    : wifiClient(), otaServer(8266), mqttClient(wifiClient) {
+    : wifiClient(), otaServer(OTA_PORT), mqttClient(wifiClient) {
   char *buff = new char[BUFFLEN];
 
   snprintf(buff, BUFFLEN, "%s-%06X", HOSTNAME_BASE, ESP.getChipId());
@@ -59,20 +59,29 @@ int8_t EspNodeBase::getWifiQuality() {
   }
 }
 
-void EspNodeBase::setup() { printVersion(); }
+void EspNodeBase::setup(const char ** options = NULL, const int num = 0) { 
+  printVersion(options, num); 
+}
 
-void EspNodeBase::printVersion() {
+void EspNodeBase::printVersion(const char ** options = NULL, const int num = 0) {
   Serial.println();
   Serial.println(
       F("==============================================================="));
   Serial.println(
-      F(": MQTT Pulse counter and MQTT display with OTA                :"));
+      F(": IOT Node with MQTT and OTA                                  :"));
   Serial.println(
       F(": (c) Anton Viktorov, latonita@yandex.ru, github.com/latonita :"));
   Serial.println(
       F("==============================================================="));
   Serial.printf("Compile date: %s\r\n", __DATE__ " " __TIME__);
   Serial.printf("Module id   : %s\r\n", id);
+  if (options != NULL && num > 0) {
+    Serial.printf("Feature set : ");
+    for (int i = 1; i <= num; i++) {
+      Serial.printf("%s ", options[i]);
+    }
+    Serial.printf("\r\n");
+  }
   Serial.printf("Hostname    : %s\r\n", hostname);
   Serial.printf("Wireless    : %s\r\n", WIFI_SSID);
   Serial.printf("OTA Pass    : %s\r\n", OTA_PASSWORD);

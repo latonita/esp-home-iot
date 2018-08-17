@@ -77,6 +77,28 @@
   bool someoneAtTheDoor = false;
 #endif
 
+const char* optionsIncluded[] = { ""
+  #ifdef DISPLAY_ON
+    , "DISPLAY"
+  #endif
+  #ifdef POWER_ON
+    , "POWER"
+  #endif
+  #ifdef WATER_ON
+    , "WATER"
+  #endif
+  #ifdef DHT_ON
+    , "DHT"
+  #endif
+  #ifdef DOORBELL_ON
+    , "DOORBELL"
+  #endif
+  #ifdef CO2_ON
+    , "CO2"
+  #endif
+};
+const int numOptionsIncluded = (sizeof(optionsIncluded) / sizeof(optionsIncluded[0])) - 1;
+
 bool readyToPublishData = false;
 bool readyForDataUpdate = false;
 
@@ -290,7 +312,7 @@ void setup() {
   delayMs(50);
 
   setupLed(LED_INFO);
-  EspNodeBase::me()->setup();
+  EspNodeBase::me()->setup(optionsIncluded, numOptionsIncluded);
 
   #ifdef DISPLAY_ON
     DisplayOn::initDisplayAndUI();
