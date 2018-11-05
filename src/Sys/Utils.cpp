@@ -6,36 +6,33 @@
 char utils_buff32[33];
 char utils_buff64[65];
 
-void delayMicros(uint32_t us){
+void delayMicros(uint32_t us) {
     uint32_t start = micros();
-    while (micros() - start < us) {}
+    while (micros() - start < us) {
+    }
 }
 
-void delayMs(uint32_t ms){
+void delayMs(uint32_t ms) {
     uint32_t start = millis();
     while (millis() - start < ms) {
         yield();
     }
 }
 
-const char * formatDouble40(double d) {
-    return dtostrf(d, 4, 0, utils_buff32);
-}
-const char * formatDouble41(double d) {
-    return dtostrf(d, 4, 1, utils_buff32);
-}
+const char *formatDouble40(double d) { return dtostrf(d, 4, 0, utils_buff32); }
+const char *formatDouble41(double d) { return dtostrf(d, 4, 1, utils_buff32); }
 
 TimeProvider::TimeProvider(){};
 
-TimeProvider * TimeProvider::_me;
-TimeProvider * TimeProvider::me() {
+TimeProvider *TimeProvider::_me;
+TimeProvider *TimeProvider::me() {
     if (_me == NULL) {
         _me = new TimeProvider();
     }
     return _me;
 }
 
-void TimeProvider::setProvider(TimeProvider * p) {
+void TimeProvider::setProvider(TimeProvider *p) {
     if (_me != NULL) {
         delete _me;
     }
@@ -44,7 +41,7 @@ void TimeProvider::setProvider(TimeProvider * p) {
 
 TimeProvider::~TimeProvider() {}
 
-const char * TimeProvider::secondsToString(unsigned long t) {
+const char *TimeProvider::secondsToString(unsigned long t) {
     static char str[12];
     long h = t / 3600;
     t = t % 3600;
@@ -54,7 +51,7 @@ const char * TimeProvider::secondsToString(unsigned long t) {
     return str;
 }
 
-const char * TimeProvider::getUpTime() {
+const char *TimeProvider::getUpTime() {
     static unsigned long last_millis = 0;
     static unsigned char overflow = 0;
     unsigned long now = millis();
@@ -70,7 +67,7 @@ unsigned long TimeProvider::getSecondsOfDay() {
     return (millis() / 1000) % 86400L;
 }
 
-const char * TimeProvider::getTimeStringShort() {
+const char *TimeProvider::getTimeStringShort() {
     static char str[12];
     auto t = getSecondsOfDay();
     long h = t / 3600;
@@ -79,7 +76,7 @@ const char * TimeProvider::getTimeStringShort() {
     snprintf(str, 12, "%02ld:%02d", h, m);
     return str;
 }
-const char * TimeProvider::getTimeStringLong() {
+const char *TimeProvider::getTimeStringLong() {
     static char str[12];
     auto t = getSecondsOfDay();
     long h = t / 3600;
@@ -90,38 +87,43 @@ const char * TimeProvider::getTimeStringLong() {
     return str;
 }
 
-const char * TimeProvider::getDateString() {
-  return "-";
-}
+const char *TimeProvider::getDateString() { return "-"; }
 
-void TimeProvider::updateTime() {
-    return;
-}
+void TimeProvider::updateTime() { return; }
 
-
-void parseDelimetedString(char *buf, char **ptrs, unsigned int max,
-                          const char *raw, unsigned int len) {
-  if (len + 1 > BUF_MAX) {
-    Serial.printf("parseDelimetedString: buff %d < len %d\r\n", BUF_MAX, len + 1);
-    return;
-  }
-
-  if (len > 0) {
-    unsigned int i = 0;
-    for (i = 0; i < max; ++i)
-      ptrs[i] = NULL;
-    memset(buf, 0, BUF_MAX);
-    strncpy(buf, raw, len);
-    buf[len] = 0;
-
-    i = 0;
-    char *p = strtok(buf, ";");
-    while (p != NULL && i < max) {
-      ptrs[i++] = p;
-      p = strtok(NULL, ";");
+void parseDelimetedString(char *buf, const unsigned int bufSize, char **ptrs, unsigned int max, const char *raw, unsigned int len) {
+    if (len + 1 > bufSize) {
+        Serial.printf("parseDelimetedString: buff %d < len %d\r\n", bufSize, len + 1);
+        return;
     }
-  }
-}
 
+    if (len > 0) {
+        unsigned int i = 0;
+        for (i = 0; i < max; ++i)
+            ptrs[i] = NULL;
+        // memset(buf, 0, BUF_MAX);
+        // strncpy(buf, raw, len);
+        auto newLen = len > bufSize ? bufSize : len;
+        memcpy(buf, raw, newLen);
+        buf[newLen] = '\0';
+
+        i = 0;
+        // /* following code leaks on esp8266 */
+        // char *p = strtok(buf, ";");
+        // while (p != NULL && i < max) {
+        //   ptrs[i++] = p;
+        //   p = strtok(NULL, ";");
+        // }
+
+        char *p = buf;
+        while (*p != '\0' && i < max) {
+            ptrs[i++] = p;
+            while (*p != '\0' && *p != ';')
+                p++;
+            if (*p != '\0')
+                *p++ = '\0';
+        }
+    }
+}
 
 #endif

@@ -5,7 +5,7 @@
 #include <stdint.h>
 #include <Arduino.h>
 
-//system setting
+// system setting
 #define MAX_UPTIME 4294967295
 #define SECONDS_IN_A_DAY 86400L
 
@@ -14,59 +14,61 @@
 extern char utils_buff32[33];
 extern char utils_buff64[65];
 
-const char * formatDouble40(double);
-const char * formatDouble41(double);
+const char *formatDouble40(double);
+const char *formatDouble41(double);
 
 #define formatInteger(x) itoa(x, utils_buff32, 10)
 
-#define COALESCE(x,y) (x != NULL ? x : y)
+#define COALESCE(x, y) (x != NULL ? x : y)
 #define COALESCE_D(x) (x != NULL ? x : "-")
 
 void delayMicros(uint32_t us);
 void delayMs(uint32_t ms);
 
 class TimeProvider {
-private:
-    static TimeProvider * _me;
-protected:
+  private:
+    static TimeProvider *_me;
+
+  protected:
     TimeProvider();
     virtual ~TimeProvider();
-public:
-    static TimeProvider * me();
 
-    static void setProvider(TimeProvider * p);
+  public:
+    static TimeProvider *me();
 
-    virtual const char * secondsToString(unsigned long);
-    virtual const char * getUpTime();
-    virtual const char * getTimeStringShort();
-    virtual const char * getTimeStringLong();
-    virtual const char * getDateString();
+    static void setProvider(TimeProvider *p);
+
+    virtual const char *secondsToString(unsigned long);
+    virtual const char *getUpTime();
+    virtual const char *getTimeStringShort();
+    virtual const char *getTimeStringLong();
+    virtual const char *getDateString();
     virtual unsigned long getSecondsOfDay();
     virtual void updateTime();
 };
 
 class ElapsedMillis {
-private:
+  private:
     unsigned long ms;
-public:
-    ElapsedMillis(void) {
-        ms = millis();
-    }
-    operator unsigned long() const {
-        return millis() - ms;
-    }
-    void rearm() {
-        ms = millis();
-    }
+
+  public:
+    ElapsedMillis(void) { ms = millis(); }
+    operator unsigned long() const { return millis() - ms; }
+    void rearm() { ms = millis(); }
 };
 
-void parseDelimetedString(char *buf, char **ptrs, unsigned int max, const char *raw, unsigned int len);
+void parseDelimetedString(char *buf, const unsigned int bufSize, char **ptrs, unsigned int max, const char *raw, unsigned int len);
 
-#define setupLed(x) pinMode(x,OUTPUT); ledOff(x)
-#define ledOn(x) digitalWrite(x,HIGH)
-#define ledOff(x) digitalWrite(x,LOW)
-#define ledPulse(x, y) ledOn(x); delayMs(2 * y / 3); ledOff(x); delayMs(y / 3)
-#define ledSet(x,y) digitalWrite(x,y)
-
+#define setupLed(x)                                                                                                                                  \
+    pinMode(x, OUTPUT);                                                                                                                              \
+    ledOff(x)
+#define ledOn(x) digitalWrite(x, HIGH)
+#define ledOff(x) digitalWrite(x, LOW)
+#define ledPulse(x, y)                                                                                                                               \
+    ledOn(x);                                                                                                                                        \
+    delayMs(2 * y / 3);                                                                                                                              \
+    ledOff(x);                                                                                                                                       \
+    delayMs(y / 3)
+#define ledSet(x, y) digitalWrite(x, y)
 
 #endif

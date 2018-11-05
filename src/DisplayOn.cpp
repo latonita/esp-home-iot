@@ -4,18 +4,20 @@
 #include "Sensors/TemperatureSensor.hpp"
 #include "Sensors/PowerMeter.hpp"
 
-SSD1306Wire * DisplayOn::display = NULL;
-OLEDDisplayUi * DisplayOn::ui = NULL;
+SSD1306Wire *DisplayOn::display = NULL;
+OLEDDisplayUi *DisplayOn::ui = NULL;
 
 FrameCallback DisplayOn::frames[] = {DisplayOn::drawDateTime
 #ifdef POWER_ON
-                        , DisplayOn::drawInstantPower
-                        , DisplayOn::drawEnergyConsumption
-                        , DisplayOn::drawEnergyReadings
+                                     ,
+                                     DisplayOn::drawInstantPower,
+                                     DisplayOn::drawEnergyConsumption,
+                                     DisplayOn::drawEnergyReadings
 #endif
 #ifdef WEATHER_ON
-                        , DisplayOn::drawCurrentWeather
-                        , DisplayOn::drawForecast
+                                     ,
+                                     DisplayOn::drawCurrentWeather,
+                                     DisplayOn::drawForecast
 #endif
 #ifdef DHT_ON
 //                        , DisplayOn::drawIndoor
@@ -25,18 +27,17 @@ const int DisplayOn::numberOfFrames = (sizeof(DisplayOn::frames) / sizeof(FrameC
 OverlayCallback DisplayOn::overlays[] = {DisplayOn::drawHeaderOverlay};
 
 #ifdef WEATHER_ON
-  char * DisplayOn::bufWeather = new char[BUF_MAX]; // NULL;
-  char * DisplayOn::weatherItems[WEATHER_DAYS * WEATHER_PARAMS] = {
-      NULL, NULL, NULL, NULL, NULL, NULL,
-      NULL, NULL, NULL, NULL, NULL, NULL};  // 4 days x 4 params
-  char *DisplayOn::bufWeatherText = new char[BUF_MAX]; // NULL;
-  char *DisplayOn::weatherText[WEATHER_DAYS] = {NULL, NULL, NULL, NULL};
+char *DisplayOn::bufWeather = new char[BUF_MAX + 1]; // NULL;
+char *DisplayOn::weatherItems[WEATHER_DAYS * WEATHER_PARAMS] = {NULL, NULL, NULL, NULL, NULL, NULL,
+                                                                NULL, NULL, NULL, NULL, NULL, NULL}; // 4 days x 4 params
+char *DisplayOn::bufWeatherText = new char[BUF_MAX + 1];                                             // NULL;
+char *DisplayOn::weatherText[WEATHER_DAYS] = {NULL, NULL, NULL, NULL};
 #endif
 
 #ifdef POWER_ON
-  char *DisplayOn::bufPowerStats = new char[BUF_MAX]; // NULL;
-  char *DisplayOn::powerStats[POWER_PARAMS] = {NULL, NULL, NULL, NULL};
-  const char *DisplayOn::formattedInstantPower = "";
+char *DisplayOn::bufPowerStats = new char[BUF_MAX + 1]; // NULL;
+char *DisplayOn::powerStats[POWER_PARAMS] = {NULL, NULL, NULL, NULL};
+const char *DisplayOn::formattedInstantPower = "";
 #endif
 
 void DisplayOn::initDisplayAndUI() {
@@ -65,9 +66,7 @@ void DisplayOn::initDisplayAndUI() {
   ui->init();
 }
 
-bool DisplayOn::isFixed() {
-    return (ui->getUiState()->frameState == FIXED);
-}
+bool DisplayOn::isFixed() { return (ui->getUiState()->frameState == FIXED); }
 
 void DisplayOn::drawEndlessProgress(const char *msg, bool finished) {
   static int counter = 0;
@@ -75,15 +74,9 @@ void DisplayOn::drawEndlessProgress(const char *msg, bool finished) {
   display->setFont(ArialMT_Plain_10);
   display->setTextAlignment(TEXT_ALIGN_CENTER_BOTH);
   display->drawString(DISPLAY_WIDTH / 2, 10, msg);
-  display->drawXbm(46, 30, 8, 8, finished || (counter % 3 == 0)
-                                     ? activeSymbole
-                                     : inactiveSymbole);
-  display->drawXbm(60, 30, 8, 8, finished || (counter % 3 == 1)
-                                     ? activeSymbole
-                                     : inactiveSymbole);
-  display->drawXbm(74, 30, 8, 8, finished || (counter % 3 == 2)
-                                     ? activeSymbole
-                                     : inactiveSymbole);
+  display->drawXbm(46, 30, 8, 8, finished || (counter % 3 == 0) ? activeSymbole : inactiveSymbole);
+  display->drawXbm(60, 30, 8, 8, finished || (counter % 3 == 1) ? activeSymbole : inactiveSymbole);
+  display->drawXbm(74, 30, 8, 8, finished || (counter % 3 == 2) ? activeSymbole : inactiveSymbole);
   if (finished)
     display->drawString(DISPLAY_WIDTH / 2, 50, "Done");
   display->display();
@@ -100,8 +93,7 @@ void DisplayOn::drawProgress(OLEDDisplay *display, int percentage, String label)
   display->display();
 }
 
-void DisplayOn::drawDateTime(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
-                  int16_t y) {
+void DisplayOn::drawDateTime(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) {
   display->setTextAlignment(TEXT_ALIGN_CENTER);
 #ifdef WEATHER_ON
   display->setFont(ArialMT_Plain_10);
@@ -115,8 +107,7 @@ void DisplayOn::drawDateTime(OLEDDisplay *display, OLEDDisplayUiState *state, in
 }
 
 #ifdef POWER_ON
-void DisplayOn::drawInstantPower(OLEDDisplay *display, OLEDDisplayUiState *state,
-                      int16_t x, int16_t y) {
+void DisplayOn::drawInstantPower(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) {
   display->setFont(ArialMT_Plain_10);
   display->setTextAlignment(TEXT_ALIGN_LEFT);
   display->drawString(42 + x, 5 + y, "Instant power");
@@ -127,8 +118,7 @@ void DisplayOn::drawInstantPower(OLEDDisplay *display, OLEDDisplayUiState *state
   display->drawXbm(0 + x, 5 + y, zap_width, zap_height, zap1);
 }
 
-void DisplayOn::drawEnergyConsumption(OLEDDisplay *display, OLEDDisplayUiState *state,
-                           int16_t x, int16_t y) {
+void DisplayOn::drawEnergyConsumption(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) {
   display->setTextAlignment(TEXT_ALIGN_CENTER);
   display->setFont(ArialMT_Plain_10);
   display->drawString(64 + x, 0, "Energy Consumption");
@@ -137,14 +127,11 @@ void DisplayOn::drawEnergyConsumption(OLEDDisplay *display, OLEDDisplayUiState *
   display->drawString(0 + x, 12, "Y-day: ");
   display->drawString(0 + x, 30, "Today: ");
   display->setTextAlignment(TEXT_ALIGN_RIGHT);
-  display->drawString(
-      128 + x, 12, String(COALESCE_D(powerStats[POWER_P_YESTERDAY])) + " kWh");
-  display->drawString(128 + x, 30,
-                      String(COALESCE_D(powerStats[POWER_P_TODAY])) + " kWh");
+  display->drawString(128 + x, 12, String(COALESCE_D(powerStats[POWER_P_YESTERDAY])) + " kWh");
+  display->drawString(128 + x, 30, String(COALESCE_D(powerStats[POWER_P_TODAY])) + " kWh");
 }
 
-void DisplayOn::drawEnergyReadings(OLEDDisplay *display, OLEDDisplayUiState *state,
-                        int16_t x, int16_t y) {
+void DisplayOn::drawEnergyReadings(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) {
   display->setTextAlignment(TEXT_ALIGN_CENTER);
   display->setFont(ArialMT_Plain_10);
   display->drawString(64 + x, 0, "Meter Readings");
@@ -153,16 +140,13 @@ void DisplayOn::drawEnergyReadings(OLEDDisplay *display, OLEDDisplayUiState *sta
   display->drawString(0 + x, 12, "T1 : ");
   display->drawString(0 + x, 30, "T2 : ");
   display->setTextAlignment(TEXT_ALIGN_RIGHT);
-  display->drawString(128 + x, 12,
-                      String(COALESCE_D(powerStats[POWER_P_T1])) + " kWh");
-  display->drawString(128 + x, 30,
-                      String(COALESCE_D(powerStats[POWER_P_T2])) + " kWh");
+  display->drawString(128 + x, 12, String(COALESCE_D(powerStats[POWER_P_T1])) + " kWh");
+  display->drawString(128 + x, 30, String(COALESCE_D(powerStats[POWER_P_T2])) + " kWh");
 }
 #endif
 
 #ifdef WEATHER_ON
-void DisplayOn::drawCurrentWeather(OLEDDisplay *display, OLEDDisplayUiState *state,
-                        int16_t x, int16_t y) {
+void DisplayOn::drawCurrentWeather(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) {
   display->setFont(ArialMT_Plain_10);
   display->setTextAlignment(TEXT_ALIGN_LEFT);
   display->drawString(60 + x, 5 + y, String(COALESCE_D(weatherText[0])));
@@ -172,7 +156,7 @@ void DisplayOn::drawCurrentWeather(OLEDDisplay *display, OLEDDisplayUiState *sta
   display->drawString(60 + x, 15 + y, temp);
 
   display->setFont(Meteocons_Plain_42);
-  String weatherIcon = String(COALESCE(weatherItems[WEATHER_P_ICON],")")); // wunderground.getTodayIcon();
+  String weatherIcon = String(COALESCE(weatherItems[WEATHER_P_ICON], ")")); // wunderground.getTodayIcon();
   int weatherIconWidth = display->getStringWidth(weatherIcon);
   display->drawString(32 + x - weatherIconWidth / 2, 05 + y, weatherIcon);
 }
@@ -186,21 +170,16 @@ void DisplayOn::drawForecast(OLEDDisplay *display, OLEDDisplayUiState *state, in
 void DisplayOn::drawForecastDetails(OLEDDisplay *display, int x, int y, int dayIndex) {
   display->setTextAlignment(TEXT_ALIGN_CENTER);
   display->setFont(ArialMT_Plain_10);
-  String day = String(
-      COALESCE_D(weatherItems[dayIndex * WEATHER_PARAMS + WEATHER_P_DAY]));
+  String day = String(COALESCE_D(weatherItems[dayIndex * WEATHER_PARAMS + WEATHER_P_DAY]));
 
   day.toUpperCase();
   display->drawString(x + 20, y, day);
 
   display->setFont(Meteocons_Plain_21);
-  display->drawString(
-      x + 20, y + 12,
-      COALESCE(weatherItems[dayIndex * WEATHER_PARAMS + WEATHER_P_ICON], ")"));
+  display->drawString(x + 20, y + 12, COALESCE(weatherItems[dayIndex * WEATHER_PARAMS + WEATHER_P_ICON], ")"));
 
   display->setFont(ArialMT_Plain_10);
-  display->drawString(
-      x + 20, y + 34,
-      COALESCE_D(weatherItems[dayIndex * WEATHER_PARAMS + WEATHER_P_TEMP]));
+  display->drawString(x + 20, y + 34, COALESCE_D(weatherItems[dayIndex * WEATHER_PARAMS + WEATHER_P_TEMP]));
   display->setTextAlignment(TEXT_ALIGN_LEFT);
 }
 #endif
@@ -237,4 +216,4 @@ void DisplayOn::drawHeaderOverlay(OLEDDisplay *display, OLEDDisplayUiState *stat
 #endif
 }
 
-#endif //DISPLAY_ON
+#endif // DISPLAY_ON
