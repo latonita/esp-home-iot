@@ -310,7 +310,27 @@ void setup() {
   Serial.println("Setup finished.");
 }
 
+char * reboot = "reboot";
+char rebootIdx = 0;
+char serialIn = 0;
+
 void loop() {
+  bool rebootEsp = false;
+// check for reboot string
+  if (Serial.available() > 0) {
+    serialIn = Serial.read();
+    if (serialIn == reboot[rebootIdx]) {
+        rebootIdx++;
+        if (reboot[rebootIdx] == 0) {
+            Serial.println("Reboot command received.");
+            rebootIdx = 0;
+            rebootEsp = true;
+        }
+    } else {
+        rebootIdx = 0;
+    }
+  }
+
   EspNodeBase::me()->loop();
   yield();
   
@@ -339,7 +359,7 @@ void loop() {
 #ifdef DISPLAY_ON
   if (DisplayOn::isFixed()) {
 #endif    
-    if (readyToPublishData && EspNodeBase::me()->isConnected()) {
+    if ((rebootEsp || readyToPublishData) && EspNodeBase::me()->isConnected()) {
       Serial.println("Let's publish sensor data");
       publishData();
 #ifdef DISPLAY_ON
@@ -360,5 +380,11 @@ void loop() {
     delayMs(remainingTimeBudget);
   }
 #endif
+
+  if (rebootEsp) {
+    delayMs(100);
+    ESP.reset();
+  }
+
   yield();
 }
